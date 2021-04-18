@@ -1,0 +1,2 @@
+project_name='Hatespeech-CNERG/Counterspeech-generation'
+api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NWY3M2QxNy1iMzE2LTRkYTEtOGRkZS05NWNlMjU0M2ZlMjYifQ=='
