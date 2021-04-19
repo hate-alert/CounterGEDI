@@ -159,8 +159,8 @@ def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer:
             if params['max_steps'] > 0 and global_step > params['max_steps']:
                 epoch_iterator.close()
                 break
-        eval_train_score=evaluate(args, model, tokenizer, train_dataset,device,params['block_size'])
-        eval_score=evaluate(args, model, tokenizer, eval_dataset,device,params['block_size'])
+        eval_train_score=evaluate(params, model, tokenizer, train_dataset,device,params['block_size'])
+        eval_score=evaluate(params, model, tokenizer, eval_dataset,device,params['block_size'])
         if(params['logging']=='neptune'):
             run["eval/perplexity_train"]=eval_train_score
             run["eval/perplexity_val"]=eval_score
