@@ -83,7 +83,7 @@ class ConversationDataset(Dataset):
 
         self.examples = []
         for element in text_list:
-            conv = construct_conv(element, tokenizer)
+            conv = construct_conv(element, tokenizer,block_size)
             self.examples.append(conv)
 
     def __len__(self):
