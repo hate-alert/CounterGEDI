@@ -63,19 +63,27 @@ def preprocess_function(text):
 
 
 
-def construct_conv(dict_reply_pair, tokenizer, eos = True, block_size=512):
-    flatten = lambda l: [item for sublist in l for item in sublist]
-    initiator=preprocess_function(dict_reply_pair['initiator_message'])
-    reply=preprocess_function(dict_reply_pair['reply_message'])
-    
-    
-    conv = list([tokenizer.encode(initiator,truncation=True,max_length=int((block_size/2)-1))+ 
-                 [tokenizer.eos_token_id] + 
-                tokenizer.encode(reply,truncation=True,max_length=int((block_size/2)-1))+
-                [tokenizer.eos_token_id]])
-    
-    
-    conv = flatten(conv)
+
+def construct_conv(dict_reply_pair, tokenizer, eos = True, block_size=512, dataset="Debate"):
+    conv = None
+    if dataset=="CONAN":
+        flatten = lambda l: [item for sublist in l for item in sublist]
+        conv = list([tokenizer.encode(text) + [tokenizer.eos_token_id]])
+        conv = flatten(conv)
+
+    elif dataset=="Debate":
+        flatten = lambda l: [item for sublist in l for item in sublist]
+        initiator=preprocess_function(dict_reply_pair['initiator_message'])
+        reply=preprocess_function(dict_reply_pair['reply_message'])
+
+
+        conv = list([tokenizer.encode(initiator,truncation=True,max_length=int((block_size/2)-1))+ 
+                     [tokenizer.eos_token_id] + 
+                    tokenizer.encode(reply,truncation=True,max_length=int((block_size/2)-1))+
+                    [tokenizer.eos_token_id]])
+
+        conv = flatten(conv)
+        
     return conv
 
 class ConversationDataset(Dataset):
@@ -83,7 +91,7 @@ class ConversationDataset(Dataset):
 
         self.examples = []
         for element in text_list:
-            conv = construct_conv(element, tokenizer)
+            conv = construct_conv(element, tokenizer,block_size)
             self.examples.append(conv)
 
     def __len__(self):

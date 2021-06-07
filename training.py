@@ -29,11 +29,6 @@ from transformers import (
 )
 
 
-
-
-
-
-
 def load_and_cache_examples(args, tokenizer, text,block_size):
     return preprocess.ConversationDataset(tokenizer, args, text,block_size)
 
@@ -53,7 +48,7 @@ def get_gpu():
         else:
             time.sleep(5)
 
-def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer: PreTrainedTokenizer, device,run):
+def train(params, df_trn, eval_dataset,model: PreTrainedModel, tokenizer: PreTrainedTokenizer, device,run):
     """ Train the model """
     
     params['train_batch_size'] = params['per_gpu_train_batch_size'] * max(1, params['n_gpu'])
@@ -63,7 +58,7 @@ def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer:
             return pad_sequence(examples, batch_first=True)
         return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
     
-    train_dataset = load_and_cache_examples(params, tokenizer, train_dataset,params['block_size'])
+    train_dataset = load_and_cache_examples(params, tokenizer, df_trn,params['block_size'])
     train_sampler = RandomSampler(train_dataset) if params['local_rank'] == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset, sampler=train_sampler, batch_size=params['train_batch_size'], collate_fn=collate, drop_last = True
@@ -117,7 +112,6 @@ def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=params['local_rank'] not in [-1, 0])
         print("Current running epoch", epoch_count)
         epoch_count+=1
-        epoch_count+=1
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
@@ -160,10 +154,11 @@ def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer:
                 epoch_iterator.close()
                 break
         eval_train_score=evaluate(params, model, tokenizer, train_dataset,device,params['block_size'])
+        #eval_train_score=evaluate(params, model, tokenizer, df_trn,device,params['block_size'])
         eval_score=evaluate(params, model, tokenizer, eval_dataset,device,params['block_size'])
         if(params['logging']=='neptune'):
-            run["eval/perplexity_train"]=eval_train_score
-            run["eval/perplexity_val"]=eval_score
+            run["eval/perplexity_train"].log(eval_train_score)
+            run["eval/perplexity_val"].log(eval_score)
         else:
             print("perplexity train score", eval_train_score)
             print("perplexity val score", eval_score)
@@ -184,7 +179,7 @@ def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer:
             tokenizer.save_pretrained(params['output_dir'])
 
             # Good practice: save your training arguments together with the trained model
-            torch.save(args, os.path.join(params['output_dir'], "training_args.bin"))
+            torch.save(params, os.path.join(params['output_dir'], "training_args.bin"))
             eval_best = eval_[-1]
     
     if(params['logging']=='neptune'):
@@ -252,7 +247,7 @@ params={
      'config_name':'microsoft/DialoGPT-medium',
      'tokenizer_name':'microsoft/DialoGPT-medium',
      'cache_dir':'../HULK/Saved_models/',
-     'block_size': 512,
+     'block_size': 256,
      'do_train': True,
      'do_eval':True,
      'evaluate_during_training':False,
@@ -344,7 +339,6 @@ if __name__ == "__main__":
         for layer in model.transformer.h[:params['freeze_layer_count']]:
             for param in layer.parameters():
                 param.requires_grad = False
-
     model.to(device)
 
     # Training
