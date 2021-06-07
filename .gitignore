@@ -1,4 +1,6 @@
 # Byte-compiled / optimized / DLL files
+data/
+.neptune/
 apiconfig.py
 __pycache__/
 *.py[cod]

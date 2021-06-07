@@ -159,8 +159,8 @@ def train(params, train_dataset, eval_dataset,model: PreTrainedModel, tokenizer:
             if params['max_steps'] > 0 and global_step > params['max_steps']:
                 epoch_iterator.close()
                 break
-        eval_train_score=evaluate(args, model, tokenizer, train_dataset,device,params['block_size'])
-        eval_score=evaluate(args, model, tokenizer, eval_dataset,device,params['block_size'])
+        eval_train_score=evaluate(params, model, tokenizer, train_dataset,device,params['block_size'])
+        eval_score=evaluate(params, model, tokenizer, eval_dataset,device,params['block_size'])
         if(params['logging']=='neptune'):
             run["eval/perplexity_train"]=eval_train_score
             run["eval/perplexity_val"]=eval_score
@@ -256,8 +256,8 @@ params={
      'do_train': True,
      'do_eval':True,
      'evaluate_during_training':False,
-     'per_gpu_train_batch_size':2,
-     'per_gpu_eval_batch_size':2,
+     'per_gpu_train_batch_size':4,
+     'per_gpu_eval_batch_size':4,
      'gradient_accumulation_steps':1,
      'learning_rate':5e-6,
      'weight_decay':0.0,
@@ -279,9 +279,9 @@ params={
      'local_rank':-1,
      'fp16':False,
      'fp16_opt_level':'O1',
-     'device':'cuda',
+     'device':'cpu',
      'logging':'neptune',
-     'freeze_layer_count':11
+     'freeze_layer_count':6
 }
 
 
@@ -333,6 +333,18 @@ if __name__ == "__main__":
         config=config,
         cache_dir=path
     )
+    for param in model.transformer.wpe.parameters():
+                param.requires_grad = False
+    for param in model.transformer.wte.parameters():
+            param.requires_grad = False
+
+
+    if params['freeze_layer_count'] != -1:
+         # otherwise we freeze the first `freeze_layer_count` encoder layers
+        for layer in model.transformer.h[:params['freeze_layer_count']]:
+            for param in layer.parameters():
+                param.requires_grad = False
+
     model.to(device)
 
     # Training
@@ -344,18 +356,6 @@ if __name__ == "__main__":
         # Load a trained model and vocabulary that you have fine-tuned
         model = AutoModelWithLMHead.from_pretrained(params['output_dir'])
         tokenizer = AutoTokenizer.from_pretrained(params['output_dir'])
-        for param in model.transformer.wpe.parameters():
-                param.requires_grad = False
-        for param in model.transformer.wte.parameters():
-                param.requires_grad = False
-
-
-        if params['freeze_layer_count'] != -1:
-             # otherwise we freeze the first `freeze_layer_count` encoder layers
-            for layer in model.transformer.h[:params['freeze_layer_count']]:
-                for param in layer.parameters():
-                    param.requires_grad = False
-        
         model.to(device)
     test_eval=0
     if test_text!=None:
