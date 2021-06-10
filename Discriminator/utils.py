@@ -7,7 +7,7 @@ import random
 import numpy as np
 
 def save_detection_model(model,tokenizer,params):
-    output_dir = params['save_path']+'_'+params['task_name']+'_'+params['model_name']+'/'
+    output_dir = params['save_path']+params['task_name']+'_'+params['model_path']+'/'
     # Create output directory if needed
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
