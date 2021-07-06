@@ -230,10 +230,10 @@ def train_caller(params,run=None):
 
 params={
      'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
-     'model_path':'microsoft/DialoGPT-medium',
+     'model_path':'gpt2',
      'cache_path':'../HULK/Saved_models/',
-     'task_name':'CONAN',
-     'max_length': 256,
+     'task_name':'Politeness',
+     'max_length': 64,
      'train': True,
      'batch_size':8,
      'gradient_accumulation_steps':1,
@@ -247,7 +247,7 @@ params={
      'seed':42,
      'device':'cuda',
      'logging':'neptune',
-     'freeze_layer_count':6
+     'freeze_layer_count':-1
 }
 
 

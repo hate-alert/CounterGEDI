@@ -82,7 +82,7 @@ class Hatexplain_dataset():
     def process_data(self, data):
         sentences, labels, attn = [], [], []
         print(len(data))
-        for row in data:
+        for row in tqdm(data,total=len(data)):
             word_tokens_all, word_mask_all = returnMask(row, self.tokenizer)
             label = max(set(row['annotators']['label']), key = row['annotators']['label'].count)
             if(self.params['train_att']):
@@ -124,11 +124,15 @@ class Normal_Dataset():
         self.max_length=params['max_length']        
         self.count_dic = {}
         self.tokenizer = tokenizer
-        self.inputs, self.labels = self.process_data(self.data)
-        self.DataLoader = self.get_dataloader(self.inputs, self.labels)
+        self.inputs, self.attn, self.labels = self.process_data(self.data)
+        self.DataLoader = self.get_dataloader(self.inputs, self.attn, self.labels)
     
     def preprocess_func(self, text):
         remove_words=['<allcaps>','</allcaps>','<hashtag>','</hashtag>','<elongated>','<emphasis>','<repeated>','\'','s']
+        for word in text.split(' '):
+            if(len(word)>40):
+                return text
+        
         word_list=text_processor.pre_process_doc(text)
         word_list=list(filter(lambda a: a not in remove_words, word_list)) 
         sent=" ".join(word_list)
@@ -144,9 +148,9 @@ class Normal_Dataset():
     def tokenize(self, sentences):
         input_ids, attention_masks = [], []
         for sent in sentences:
-            inputs=self.tokenizer.encode(sent,add_special_tokens=True,
+            inputs=self.tokenizer.encode(sent,add_special_tokens=False,
                                               truncation=True,
-                                              max_length=self.max_length)
+                                              max_length=(self.max_length-1))
 #             encoded_dict = self.tokenizer.encode_plus(sent,
 #                                                     add_special_tokens=True,
 #                                                     max_length=self.max_length, 
@@ -156,17 +160,18 @@ class Normal_Dataset():
 #                                                     truncation = True)
             inputs = [50256] + inputs
             input_ids.append(inputs)
+            attention_masks.append([1]*len(inputs))
             #attention_masks.append(encoded_dict['attention_mask'])
         
 #         input_ids = torch.cat(input_ids, dim=0)
 #         attention_masks = torch.cat(attention_masks, dim=0)
-
-        return input_ids
+        
+        return input_ids,attention_masks
     
     
     def process_data(self, data):
         sentences, labels, attn = [], [], []
-        for label, sentence in tqdm(zip(list(data['labels']), list(data['text']))):
+        for label, sentence in tqdm(zip(list(data['labels']), list(data['text'])),total=len(data['labels'])):
             label = self.label_dict[label]
             try:
                 sentence = self.preprocess_func(sentence)
@@ -174,18 +179,27 @@ class Normal_Dataset():
                 sentence = self.preprocess_func("dummy text")
             sentences.append(sentence)
             labels.append(label)
-        inputs = self.tokenize(sentences)
+        inputs, attn_mask = self.tokenize(sentences)
         #attn = self.dummy_attention(inputs)
         #return inputs, torch.Tensor(labels), torch.Tensor(attn)
-        return inputs, torch.Tensor(labels)
+        return inputs, attn_mask, torch.Tensor(labels)
     
-    def get_dataloader(self, inputs, labels, train = True):
+    def get_attention_mask(self,attn_mask, maxlen=128):
+        attn_mask_modified=[]
+        for attn in attn_mask:
+            attn = attn + [0]*(maxlen-len(attn))
+            attn_mask_modified.append(attn)
+        return attn_mask_modified
+                                   
+    def get_dataloader(self, inputs, attn_mask, labels, train = True):
         inputs = pad_sequences(inputs,maxlen=int(self.params['max_length']), dtype="long", 
                           value=self.tokenizer.pad_token_id, truncating="post", padding="post")
-        
+        attention_mask= self.get_attention_mask(attn_mask, maxlen=int(self.params['max_length']))
+                                   
+                                   
         input_ids=torch.tensor(inputs)
-        print(input_ids)
-        data = TensorDataset(input_ids, labels)
+        attention_mask=torch.tensor(attention_mask)
+        data = TensorDataset(input_ids,attention_mask,labels)
         if self.train:
             sampler = RandomSampler(data)
         else:

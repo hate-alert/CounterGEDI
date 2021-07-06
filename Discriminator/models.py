@@ -62,7 +62,7 @@ class Discriminator(torch.nn.Module):
 #         classifier_head=None,
 #         cached_mode=False,
 #         device='cpu'
-
+        self.EPSILON = 1e-10
         self.pretrained_model=params['model_path']
         self.classifier_head=classifier_head
         self.class_size = params['num_classes']
@@ -70,10 +70,10 @@ class Discriminator(torch.nn.Module):
         if self.pretrained_model.startswith("gpt2"):
             self.tokenizer = tokenizer
             self.encoder = GPT2LMHeadModel.from_pretrained(self.pretrained_model)
-#             self.encoder.resize_token_embeddings(len(tokenizer))
+            self.encoder.resize_token_embeddings(len(tokenizer))
 
 #             # fix model padding token id
-#             self.encoder.config.pad_token_id = self.encoder.config.eos_token_id
+            self.encoder.config.pad_token_id = self.encoder.config.eos_token_id
             self.embed_size = self.encoder.transformer.config.hidden_size
         elif self.pretrained_model.startswith("bert"):
             self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
@@ -103,44 +103,51 @@ class Discriminator(torch.nn.Module):
             param.requires_grad = False
         self.classifier_head.train()
 
-    def avg_representation(self, x):
-        mask = x.ne(0).unsqueeze(2).repeat(
+    def avg_representation(self, x,mask):
+#         mask = mask.unsqueeze(2).repeat(
+#             1, 1, self.embed_size
+#         ).float().to(self.device).detach()
+        mask = mask.unsqueeze(2).repeat(
             1, 1, self.embed_size
-        ).float().to(self.device).detach()
+        )
+        
         if hasattr(self.encoder, 'transformer'):
             # for gpt2
-            hidden, _ = self.encoder.transformer(x)
+            #hidden, _ = self.encoder.transformer(x)
+            hidden_ = self.encoder.transformer(x)
+            hidden = hidden_.last_hidden_state
         else:
             # for bert
             hidden, _ = self.encoder(x)
             
-        print(hidden)
-        print(mask.shape)
+        
         masked_hidden = hidden * mask
         avg_hidden = torch.sum(masked_hidden, dim=1) / (
-                torch.sum(mask, dim=1).detach() + EPSILON
+                torch.sum(mask, dim=1).detach() + self.EPSILON
         )
         return avg_hidden
 
-    def forward(self, x, labels):
+    def forward(self, x, mask, labels):
         if self.cached_mode:
             avg_hidden = x.to(self.device)
         else:
-            avg_hidden = self.avg_representation(x.to(self.device))
+            avg_hidden = self.avg_representation(x,mask)
 
         logits = self.classifier_head(avg_hidden)
         probs = F.log_softmax(logits, dim=-1)
-        
-        
-        loss = F.nll_loss(probs, labels)
+        loss=None
+        if labels is not None:
+            loss = F.nll_loss(probs, labels)
         
         return probs,loss
 
     def predict(self, input_sentence):
         input_t = self.tokenizer.encode(input_sentence)
         input_t = torch.tensor([input_t], dtype=torch.long, device=self.device)
+        mask = torch.tensor([[1]*len(input_t)], dtype=torch.long, device=self.device)
+        
         if self.cached_mode:
-            input_t = self.avg_representation(input_t)
+            input_t = self.avg_representation(input_t,mask)
 
         log_probs = self(input_t).data.cpu().numpy().flatten().tolist()
         prob = [math.exp(log_prob) for log_prob in log_probs]
