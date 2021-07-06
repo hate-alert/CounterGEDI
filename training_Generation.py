@@ -31,6 +31,8 @@ import numpy as np
 from Generation.models import *
 from Generation.data import *
 from Generation.eval import *
+from Generation.utils import *
+
 from Utils.misc import *
 
 
@@ -38,7 +40,7 @@ def get_gpu():
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 0.1, maxMemory = 0.07, includeNan=False, excludeID=[], excludeUUID=[])
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 0.1, maxMemory = 0.2, includeNan=False, excludeID=[], excludeUUID=[])
         if len(tempID) > 0:
             print("Found a gpu")
             print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
@@ -55,16 +57,13 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
         params['num_train_epochs'] = params['max_steps'] // (len(train_dataloader) // params['gradient_accumulation_steps']) + 1
     else:
         t_total = len(train_dataloader) // params['gradient_accumulation_steps'] * params['num_train_epochs']
-
+    
     model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
-    model.resize_token_embeddings(len(tokenizer))
+    print("Tokenizer loaded")
     # add_special_tokens_(model, tokenizer)
-
     # Prepare optimizer and schedule (linear warmup and decay)
     # Track metadata and hyperparameters of your run
-    
     # Track the training process by logging your training metrics
-    
     
     #The optimizer allows us to apply different hyperpameters for specific parameter groups. 
     #For example, we can apply weight decay to all parameters other than bias and layer normalization terms:
@@ -89,8 +88,10 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
     
     model.zero_grad()
     train_iterator = trange(epochs_trained, int(params['num_train_epochs']), desc="Epoch")
-    eval_best = 100000
-    eval_ = []
+    eval_best_val = 100000
+    eval_best_test = 100000
+    eval_val = []
+    eval_test = []
     epoch_count=1
     for _ in train_iterator:
         print("Current running epoch", epoch_count)
@@ -129,8 +130,7 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
                 scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
                 global_step += 1
-                
-            
+          
             if params['max_steps'] > 0 and global_step > params['max_steps']:
                 epoch_iterator.close()
                 break
@@ -139,9 +139,6 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
         eval_val_score=evaluate(params, model, eval_dataloader, device)
         eval_test_score=evaluate(params, model, test_dataloader, device)
 
-        
-        
-        
         
         if(params['logging']=='neptune'):
             run["eval/perplexity_train"].log(eval_train_score)
@@ -153,31 +150,23 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
             print("perplexity test score", eval_test_score)
 
            
-        eval_.append(eval_score)
+        eval_val.append(eval_val_score)
+        eval_test.append(eval_test_score)
         if params['max_steps'] > 0 and global_step > params['max_steps']:
             train_iterator.close()
             break
-        if eval_[-1] < eval_best:
-            os.makedirs(params['output_dir'], exist_ok=True)
-
-            # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-            # They can then be reloaded using `from_pretrained()`
-            model_to_save = (
-                model.module if hasattr(model, "module") else model
-            )  # Take care of distributed/parallel training
-            model_to_save.save_pretrained(params['output_dir'])
-            tokenizer.save_pretrained(params['output_dir'])
-
-            # Good practice: save your training arguments together with the trained model
-            torch.save(params, os.path.join(params['output_dir'], "training_args.bin"))
-            eval_best = eval_[-1]
-    
+        if eval_val[-1] < eval_best_val:
+            save_generation_model(model,tokenizer, params)
+            eval_best_val = eval_val[-1]
+            eval_best_test = eval_test[-1]
     if(params['logging']=='neptune'):
-        run["eval/best_perplexity_val"]=eval_best
+        run["eval/best_perplexity_val"]=eval_best_val
+        run["eval/best_perplexity_test"]=eval_best_test
     else:
         print("best perplexity val", eval_best)
+        print("best perplexity test", eval_best_test)
     
-    return global_step, tr_loss / global_step, eval_
+    return global_step, tr_loss / global_step, eval_val
 
 
 
@@ -191,8 +180,8 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
 def train_caller(params,run=None):
     
     dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
-    config = AutoConfig.from_pretrained(params['config_name'],cache_dir=params['cache_path'])
-    tokenizer = AutoTokenizer.from_pretrained(params['tokenizer_name'],cache_dir=params['cache_path'])
+    config = AutoConfig.from_pretrained(params['model_path'],cache_dir=params['cache_path'])
+    tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
     train_data,valid_data,test_data=load_data_own_gen(data_path=dataset_path)
     train_data_source = Normal_Generation_Dataset(train_data,tokenizer, params,train = True)
@@ -206,17 +195,17 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-    #         deviceID = get_gpu()
-    #         torch.cuda.set_device(deviceID[0])
+            deviceID = get_gpu()
+            torch.cuda.set_device(deviceID[0])
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
-            torch.cuda.set_device(args.gpuid)
+#             torch.cuda.set_device(args.gpuid)
 
     else:
         print('Since you dont want to use GPU, using the CPU instead.')
         device = torch.device("cpu")
     
-    model = Model_Generation.from_pretrained(params['model_name_or_path'],config=config,cache_dir=params['cache_path'])
+    model = Model_Generation.from_pretrained(params['model_path'],config=config,cache_dir=params['cache_path'])
     for param in model.transformer.wpe.parameters():
             param.requires_grad = False
     for param in model.transformer.wte.parameters():
@@ -228,9 +217,7 @@ def train_caller(params,run=None):
         for layer in model.transformer.h[:params['freeze_layer_count']]:
             for param in layer.parameters():
                 param.requires_grad = False
-                
     model.resize_token_embeddings(len(tokenizer))
- 
     # fix model padding token id
     model.config.pad_token_id = model.config.eos_token_id
     model.to(device)
@@ -242,16 +229,13 @@ def train_caller(params,run=None):
 
 
 params={
-     'output_dir':'../HULK/Counterspeech/models/createdebate_model',
-     'model_type':'microsoft/DialoGPT-medium',
-     'model_name_or_path':'microsoft/DialoGPT-medium',
-     'config_name':'microsoft/DialoGPT-medium',
-     'tokenizer_name':'microsoft/DialoGPT-medium',
+     'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
+     'model_path':'microsoft/DialoGPT-medium',
      'cache_path':'../HULK/Saved_models/',
-     'task_name':'Create_debate',
+     'task_name':'CONAN',
      'max_length': 256,
      'train': True,
-     'batch_size':4,
+     'batch_size':8,
      'gradient_accumulation_steps':1,
      'learning_rate':5e-6,
      'weight_decay':0.0,
@@ -260,9 +244,9 @@ params={
      'num_train_epochs':10,
      'max_steps':-1,
      'warmup_steps':0,
-     'seed':56,
-     'device':'cpu',
-     'logging':'local',
+     'seed':42,
+     'device':'cuda',
+     'logging':'neptune',
      'freeze_layer_count':6
 }
 
@@ -273,7 +257,6 @@ if __name__ == "__main__":
     run=None
     if(params['logging']=='neptune'):
         run = neptune.init(project=project_name,api_token=api_token)
-        run["Dataset"] = "createdebate_dataset"
         run["parameters"] = params
     else:
         pass
