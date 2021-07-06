@@ -23,11 +23,18 @@ def evaluate_classifier(test_dataloader, params,model,device):
 
         ypred = ypred.cpu().numpy()
         label_ids = b_labels.to('cpu').numpy()
+        
+#         print("ypred")
+#         print(get_predicted(ypred))
+        
+#         print("labels")
+#         print(label_ids)
+        
         try:
             y_preds = np.hstack((y_preds, get_predicted(ypred)))
             y_test = np.hstack((y_test, label_ids))
         except:
-            y_preds, y_test = ypred, label_ids
+            y_preds, y_test = get_predicted(ypred), label_ids
     
 #     print(classification_report(y_test, y_preds))
 #     f1 = f1_score(y_test, y_preds, average = 'macro')

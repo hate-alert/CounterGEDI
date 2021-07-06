@@ -53,6 +53,8 @@ class Normal_Generation_Dataset():
     
     def preprocess_func(self, text):
         remove_words=['<allcaps>','</allcaps>','<hashtag>','</hashtag>','<elongated>','<emphasis>','<repeated>','\'','s']
+        
+        
         word_list=text_processor.pre_process_doc(text)
         word_list=list(filter(lambda a: a not in remove_words, word_list)) 
         sent=" ".join(word_list)
@@ -77,7 +79,7 @@ class Normal_Generation_Dataset():
 
     def tokenize(self, dataframe):
         inputs=[]
-        for index,row in dataframe.iterrows():
+        for index,row in tqdm(dataframe.iterrows(),total=len(dataframe)):
             conv = self.construct_conv(row)
             inputs.append(conv)
         return inputs
@@ -96,4 +98,36 @@ class Normal_Generation_Dataset():
         else:
             sampler = SequentialSampler(data)
         return DataLoader(data, sampler=sampler, batch_size=self.batch_size, drop_last=True)
+
+
     
+    
+    
+    
+    
+    
+    
+class Normal_Dexpert_Dataset(Normal_Generation_Dataset):
+    def __init__(self, data, tokenizer=None,  params=None,train = False):
+        self.params= params
+        self.label = params['label']
+        data=data[data['label']==self.label]
+        self.data = data
+        self.batch_size = self.params['batch_size']
+        self.train = train
+        self.max_length=params['max_length']        
+        self.count_dic = {}
+        self.tokenizer = tokenizer
+        self.inputs = self.process_data(self.data)
+        self.DataLoader = self.get_dataloader(self.inputs)
+    
+    
+    
+    def construct_conv(self,dict_reply_pair):
+        conv = None
+        flatten = lambda l: [item for sublist in l for item in sublist]
+        initiator=self.preprocess_func(dict_reply_pair['text'])
+        conv = list(self.tokenizer.encode(initiator,truncation=True,max_length=int(self.max_length)))
+
+        conv = flatten(conv)
+        return conv

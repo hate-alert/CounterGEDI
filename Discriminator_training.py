@@ -18,19 +18,18 @@ import json
 import time
 
 params={
- 'dataset':'../HULK/Counterspeech/Datasets/Politeness/',
  'model_path':'gpt2-medium',
  'task_name':'Politeness',
  'save_path':'../HULK/Counterspeech/Saved_models/Discriminator/',
- 'logging':'local',
+ 'logging':'neptune',
  'cache_path':'../HULK/Saved_models/',
- 'batch_size':16,
+ 'batch_size':8,
  'max_length':128,
  'dropout':1.0,
- 'device':'cpu',
+ 'device':'cuda',
  'epochs':10,
  'seed':42,
- 'learning_rate':1e-5
+ 'learning_rate':0.001
 
 }
 
@@ -79,9 +78,10 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
         model.train()
         for step, batch in tqdm(enumerate(training_dataloader), total=len(training_dataloader)):
             b_input_ids=batch[0].to(device).long() 
-#             b_input_mask=batch[1].to(device)
-            b_labels = batch[1].to(device).long()
-            ypred, loss = model(b_input_ids,b_labels)
+            b_input_mask=batch[1].to(device)
+            b_labels = batch[2].to(device).long()
+            optimizer.zero_grad()
+            ypred, loss = model(b_input_ids,b_input_mask,b_labels)
             
             if(params['logging']=='local'):
                 if step%100 == 0:
@@ -89,12 +89,15 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
             else:
                 run["train/batch_loss"].log(loss.item())
 
-            optimizer.zero_grad()
+            
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             scheduler.step()
-
+        
+        
+        print("running training")
+        macro_f1_train,accuracy_train, pre_train, rec_train = evaluate_classifier(training_dataloader, params,model,device)
         
         print("running validation")
         macro_f1_val,accuracy_val, pre_val, rec_val = evaluate_classifier(validation_dataloader, params,model,device)
@@ -116,7 +119,9 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
             run["label/test/positive_class_recall"].log(rec_test)
             
         else:
-            print("  Macro F1: {0:.3f}".format(macro_f1_val))
+            print("Train Macro F1: {0:.3f}".format(macro_f1_train))
+            print("Val Macro F1: {0:.3f}".format(macro_f1_val))
+            print("Test Macro F1: {0:.3f}".format(macro_f1_test))
         
         if macro_f1_val > best_macro_f1_val:
             best_macro_f1_val = macro_f1_val
@@ -135,7 +140,7 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
 
 
 def train_caller(params,run=None):
-        tokenizer = AutoTokenizer.from_pretrained(params['model_path'],use_fast=False, cache_dir=params['cache_path'],local_files_only=False)
+        tokenizer = AutoTokenizer.from_pretrained(params['model_path'],use_fast=False, cache_dir=params['cache_path'])
         ### add model loading code 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -153,18 +158,30 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-    #         deviceID = get_gpu()
-    #         torch.cuda.set_device(deviceID[0])
-            ##### comment this line if you want to manually set the gpu
+            deviceID = get_gpu()
+            torch.cuda.set_device(deviceID[0])
+            #### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
-            torch.cuda.set_device(args.gpuid)
+            #torch.cuda.set_device(args.gpuid)
 
         else:
             print('Since you dont want to use GPU, using the CPU instead.')
             device = torch.device("cpu")
         
         model = Discriminator(params,tokenizer=tokenizer,device=device).to(device)
+        model.train_custom()
+
+        discriminator_meta = {
+            "class_size": len(train_data_source.label_dict),
+            "embed_size": model.embed_size,
+            "pretrained_model": params['model_path'],
+            "class_vocab": train_data_source.label_dict,
+            "default_class": 1,
+        }
         
+        save_detection_meta(discriminator_meta,params)
+
+    
 #         model = Model_Label.from_pretrained(params['model_path'], cache_dir=params['cache_path'],params=params,output_attentions = True,output_hidden_states = False).to(device)
         train(train_data_source.DataLoader, val_data_source.DataLoader,test_data_source.DataLoader,model,tokenizer,params,run,device)
         
@@ -172,5 +189,13 @@ def train_caller(params,run=None):
     
 if __name__ == "__main__":
     fix_the_random(seed_val = params['seed'])
-    train_caller(params)
+    run=None
+    if(params['logging']=='neptune'):
+        run = neptune.init(project=project_name,api_token=api_token)
+        run["parameters"] = params
+    else:
+        pass
+    train_caller(params,run)
+    if(run is not None):
+        run.stop()
     
