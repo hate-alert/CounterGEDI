@@ -211,11 +211,11 @@ def main(model_path,dataset):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-            deviceID = get_gpu()
-            torch.cuda.set_device(deviceID[0])
-            ##### comment this line if you want to manually set the gpu
+#             deviceID = get_gpu()
+#             torch.cuda.set_device(deviceID[0])
+#             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
-#             torch.cuda.set_device(args.gpuid)
+            torch.cuda.set_device(1)
 
     else:
         print('Since you dont want to use GPU, using the CPU instead.')
@@ -312,7 +312,11 @@ if __name__ == "__main__":
     
     total = [model_paths, datasets]
     for element in itertools.product(*total):
+        
         model=element[0]
+        if(model in model_paths[0:2]):
+            continue
+        
         dataset=element[1]
         main(model,dataset)
     
