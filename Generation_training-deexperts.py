@@ -3,6 +3,7 @@ import os
 import json
 import torch
 import time
+import argparse
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from typing import Dict, List, Tuple
@@ -40,7 +41,7 @@ def get_gpu():
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 0.1, maxMemory = 0.2, includeNan=False, excludeID=[], excludeUUID=[])
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 1.0, maxMemory = 0.5, includeNan=False, excludeID=[], excludeUUID=[])
         if len(tempID) > 0:
             print("Found a gpu")
             print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
@@ -156,14 +157,14 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
             train_iterator.close()
             break
         if eval_val[-1] < eval_best_val:
-            save_generation_model(model,tokenizer, params)
+            save_generation_dexpert(model,tokenizer, params)
             eval_best_val = eval_val[-1]
             eval_best_test = eval_test[-1]
     if(params['logging']=='neptune'):
         run["eval/best_perplexity_val"]=eval_best_val
         run["eval/best_perplexity_test"]=eval_best_test
     else:
-        print("best perplexity val", eval_best)
+        print("best perplexity val", eval_best_val)
         print("best perplexity test", eval_best_test)
     
     return global_step, tr_loss / global_step, eval_val
@@ -177,16 +178,25 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
 
 
 
-def train_caller(params,run=None):
-    
+def train_caller(params,run=None,gpu_id=0):
     dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
     config = AutoConfig.from_pretrained(params['model_path'],cache_dir=params['cache_path'])
     tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
-    train_data,valid_data,test_data=load_data_own_gen(data_path=dataset_path)
-    train_data_source = Normal_Generation_Dataset(train_data,tokenizer, params,train = True)
-    val_data_source = Normal_Generation_Dataset(valid_data,tokenizer,params)
-    test_data_source = Normal_Generation_Dataset(test_data,tokenizer, params)
+    train_data,valid_data,test_data,labels=load_data_own(data_path=dataset_path)
+    
+    if params['label'] in labels:
+        print("Label data", params['label'])
+    else:
+        print("Please give one of the labels out of:")
+        print(labels)
+        exit()
+              
+    
+    
+    train_data_source = Normal_Dexpert_Dataset(train_data,tokenizer, params,train = True)
+    val_data_source = Normal_Dexpert_Dataset(valid_data,tokenizer,params)
+    test_data_source = Normal_Dexpert_Dataset(test_data,tokenizer, params)
     
     
     
@@ -195,7 +205,8 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-            deviceID = get_gpu()
+            #deviceID = get_gpu()
+            deviceID=[gpu_id]
             torch.cuda.set_device(deviceID[0])
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
@@ -232,7 +243,8 @@ params={
      'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
      'model_path':'gpt2',
      'cache_path':'../HULK/Saved_models/',
-     'task_name':'Politeness',
+     'task_name':'Toxicity',
+     'label':'toxic',
      'max_length': 64,
      'train': True,
      'batch_size':8,
@@ -246,7 +258,7 @@ params={
      'warmup_steps':0,
      'seed':42,
      'device':'cuda',
-     'logging':'neptune',
+     'logging':'local',
      'freeze_layer_count':-1
 }
 
@@ -254,13 +266,37 @@ params={
 
 if __name__ == "__main__":
     fix_the_random(seed_val = params['seed'])
+    my_parser = argparse.ArgumentParser()
+    my_parser.add_argument('task',
+                           metavar='--task',
+                           type=str,
+                           help='the task of the model')
+    
+    my_parser.add_argument('label',
+                           metavar='--label',
+                           type=str,
+                           help='the label corresponding to data')
+    
+    my_parser.add_argument('gpu_id',
+                           metavar='--gpu_id',
+                           type=int,
+                           help='GPU id')
+    
+    
+    args = my_parser.parse_args()
+    
+    params['task_name']=args.task
+    params['label']=args.label
+    
+    
+    
     run=None
     if(params['logging']=='neptune'):
         run = neptune.init(project=project_name,api_token=api_token)
         run["parameters"] = params
     else:
         pass
-    train_caller(params,run)
+    train_caller(params,run,args.gpu_id)
     if(run is not None):
         run.stop()
     

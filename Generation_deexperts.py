@@ -1,12 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-import sys
-from Generation.eval import *
-from Generation.utils import *
-
 import json
 from os import listdir
 import glob
@@ -19,6 +10,8 @@ import numpy as np
 import GPUtil
 import time
 import itertools
+from Generation.eval import *
+from Generation.utils import *
 
 
 from transformers import (
@@ -35,9 +28,6 @@ from transformers import (
 )
 
 
-# In[4]:
-
-
 params = {
     'sep_token':'<|endoftext|>',
     'max_generation_length': 200,
@@ -48,27 +38,23 @@ params = {
     'repition_penalty': 3.5,
     'k':100,
     'p':0.92,
+    'filter_p':0.9,
     'sample':True,
     'temperature':1.2,
     'early_stopping':True,
-    'model_type':'gpt2-medium',
-    'model_name_or_path':'gpt2-medium',
-    'config_name':'gpt2-medium',
-    'tokenizer_name':'gpt2-medium',
+    'model_path':'gpt2-medium',
+    'dataset_hate':'CONAN',
+    'task_name':[('Politeness','polite'),('Toxicity','toxic')],
+    'coefficient':[3.2,-3.2],
     'save_path': './../HULK/Counterspeech/Results/',
     'device': 'cuda',
     'batch_size':4,
+    'cache_path':'../HULK/Saved_models/'
 }
 
 
 
-path_models   = '../HULK/Counterspeech/Saved_Models/Generator'
-path_datasets = '../HULK/Counterspeech/Datasets'
-models   = ["microsoft/DialoGPT-medium", "gpt2-medium"]
-datasets = listdir(path_datasets)
-
-
-
+#task_name  is a list having element in the format (task_name,class_name)
 def get_gpu():
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
@@ -85,7 +71,7 @@ def get_gpu():
 
 
 # In[23]:
-def get_dataloader(params,sentences, tokenizer):
+def get_dataloader(sentences, tokenizer, params):
     sents=[]
     attns=[]
     
@@ -101,10 +87,9 @@ def get_dataloader(params,sentences, tokenizer):
     sampler = SequentialSampler(data)
     return DataLoader(data, sampler=sampler, batch_size=params['batch_size'])
 
-def generate(params,hate_sentences,model,tokenizer,device):
+def generate(params,hate_sentences,model,controller_list,tokenizer,device):
     cntr = []
-    model.eval()
-    test_dataloader=get_dataloader(params,hate_sentences, tokenizer)
+    test_dataloader=get_dataloader(hate_sentences, tokenizer,params)
     for step, batch in tqdm(enumerate(test_dataloader), total=len(test_dataloader), desc="Evaluating"):
         input_ids = batch[0].to(device)
         attention_mask = batch[1].to(device)
@@ -117,12 +102,30 @@ def generate(params,hate_sentences,model,tokenizer,device):
         with torch.no_grad():
             for step in range(params['max_generation_length']):
                 outputs = model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
-                logits=outputs.logits
+                ensemble_logits=outputs.logits
+                
+                if params['filter_p'] < 1.0:
+                    ensemble_logits = top_k_top_p_filtering(ensemble_logits, top_p=params['filter_p'])
+                
+                
+                
+                if(len(controller_list)>0):
+                    controller_logits=[]
+                    for model_temp in controller_list:
+                        temp_outputs = model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+                        logits_temp=temp_outputs.logits
+                        controller_logits.append(logits_temp)
+                    for i in range(len(controller_list)):
+                        alpha = torch.tensor(params['coefficient'][i]).to(device)
+                        ensemble_logits += alpha * (controller_logits[i])
+
+                
+                
                 if step == 0:
                     last_non_masked_idx = torch.sum(attention_mask, dim=1) - 1
-                    next_token_logits = logits[range(batch_size), last_non_masked_idx, :]
+                    next_token_logits = ensemble_logits[range(batch_size), last_non_masked_idx, :]
                 else:
-                    next_token_logits = logits[:, -1, :]
+                    next_token_logits = ensemble_logits[:, -1, :]
 
                 if params['sample']==True:
                     # Temperature (higher temperature => more likely to sample low probability tokens)
@@ -153,17 +156,13 @@ def generate(params,hate_sentences,model,tokenizer,device):
                 input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
                 attention_mask = torch.cat([attention_mask, attention_mask.new_ones((batch_size, 1))], dim=1)
                 position_ids = torch.cat([position_ids, (position_ids[:, -1] + 1).unsqueeze(-1)], dim=1)
-
-        decoded_outputs = [tokenizer.decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            decoded_outputs = [tokenizer.decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                            for output in input_ids[:, input_seq_len:]]
                
         
-        cntr += decoded_outputs
+            cntr += decoded_outputs
     print(len(cntr))
     return cntr
-
-
-# In[6]:
 
 
 def hate_refrences(data,test_set):
@@ -189,23 +188,12 @@ def hate_refrences(data,test_set):
     return hate,refs             # a given hate instance and refrences(replies) for metrics evaluation
 
 
-# In[7]:
 
 
-def training_corpus(train_set):
-    replies = []
-    for sample in train_set:
-        rep = sample[1]
-        replies.append(rep)
-    replies = list(set(replies))
-    return replies                # returns the sentences used while training 
-
-
- 
-
-# In[8]:
 def main(params,model_path,dataset):
-    
+    path_models   = '../HULK/Counterspeech/Saved_Models/Generator'
+    path_datasets = '../HULK/Counterspeech/Datasets'
+
     
     if torch.cuda.is_available() and params['device']=='cuda':    
         # Tell PyTorch to use the GPU.    
@@ -224,86 +212,72 @@ def main(params,model_path,dataset):
     
     
     
-    train_path = glob.glob(path_datasets+'/*'+dataset+'*/*rain*')[0] 
-    test_path  = glob.glob(path_datasets+'/*'+dataset+'*/*es*')[0]
-    print(model_path,train_path,test_path)
+    test_path  = path_datasets+'/'+dataset+'/Test.csv'
+    train_path  = path_datasets+'/'+dataset+'/Train.csv'
 
-
-    # In[13]:
-
-    cache_path= '../HULK/Saved_models/'
+    cache_path = params['cache_path']
+    
+    #Politeness_dexpert_gpt2_polite
+    controller_list=[]
+    for task in params['task_name']:
+        path_model_task=path_models+'/'+task[0]+'_dexpert_gpt2_'+task[1]+'/'
+        model_temp=AutoModelForCausalLM.from_pretrained(path_model_task,cache_dir=cache_path)
+        model_temp.to(device)
+        model_temp.eval()
+        controller_list.append(model_temp)
+    
     tokenizer = AutoTokenizer.from_pretrained(model_path,cache_dir=cache_path)
     model = AutoModelForCausalLM.from_pretrained(model_path,cache_dir=cache_path)
     tokenizer.padding_side = "left" 
     tokenizer.pad_token = tokenizer.eos_token # to avoid an error
     model.to(device)
+    model.eval()
     
-    
+    test  = pd.read_csv(test_path)
     
     train = pd.read_csv(train_path)
     test  = pd.read_csv(test_path)
     train_set = list(zip(train['initiator_message'].tolist(),train['reply_message'].tolist()))
     test_set  = list(zip(test['initiator_message'].tolist(),test['reply_message'].tolist()))
     data = []
-    
-    
     for x in test_set:
         data.append(x)
     for x in train_set:
         data.append(x)
     print(len(data),len(test_set),len(train_set))
-
-
-    # In[ ]:
-
-
     hate, cntr_refs = hate_refrences(data,test_set) 
-    cntr_replies    = generate(params,hate,model,tokenizer,device)
-    # In[ ]:
-
+    cntr_replies = generate(params,hate,model,controller_list,tokenizer,device)
+    
+    
     del model
+    for controller in controller_list:
+        del controller
     torch.cuda.empty_cache()
     
-    all_replies = [cntr_replies,cntr_refs]  # generated hypothesis, refrences
-    bleu, bleu_4, meteor_ = nltk_metrics(all_replies)
-    train_corpus = training_corpus(train_set)
-    diversity , novelty   = diversity_and_novelty(train_corpus,cntr_replies)
-
-    
-    
-    # In[ ]:
-
-
-    print(bleu,bleu_4,diversity,novelty,meteor_)
-    #### File to write the results
-    model_path_modified = "-".join(model_path.split('/')[-2:])
-    write_in=params["save_path"] + model_path_modified +"_on_"+dataset+".json"
-
     dict_results={}
-    
-    dict_results['metrics']={'bleu':bleu,'bleu_4':bleu_4,'diversity':diversity,'novelty':novelty, 'meteor':meteor_}
     dict_results['params']=params
-    
-    
     hate_counter_replies={}
+    
     count=0
-    for hate,counter,counter_ref in zip(hate,cntr_replies,cntr_refs):
+    for hate,counter in zip(hate,cntr_replies):
         temp={
             'hatespeech':hate,
             'counterspeech_model':counter,
-            'counterspeech_ref':counter_ref
-        } 
+        }
         hate_counter_replies[count]=temp
         count+=1
+
     dict_results['samples']=hate_counter_replies  
     
-    
+    model_path_modified = "-".join(model_path.split('/')[-2:])
+    print(model_path_modified)
+    write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert.json"
     with open(write_in, 'w') as outfile:
-            json.dump(dict_results, outfile,indent=4)
+         json.dump(dict_results, outfile,indent=4)
     
-    # In[ ]:
     
-
+                         
+    
 if __name__ == "__main__":
     
     saved_path='../HULK/Counterspeech/Saved_Models/Generator/'
@@ -311,7 +285,7 @@ if __name__ == "__main__":
     
 #     model_paths=["microsoft/DialoGPT-medium", "gpt2-medium", 
 #                 saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',
-#                 saved_path+'CONAN_DialoGPT-medium' , saved_path+'CONAN_DialoGPT-medium']
+#                 saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
     model_paths=[saved_path+'Create_debate_DialoGPT-medium']
     datasets = ["CONAN", "Reddit", "Gab"]
     
@@ -319,9 +293,15 @@ if __name__ == "__main__":
     for element in itertools.product(*total):
         model=element[0]
         dataset=element[1]
+        print(model,dataset)
         main(params,model,dataset)
     
-
     
-#     for i in range(len(mdl)):
-#         
+    
+    
+
+
+
+
+
+

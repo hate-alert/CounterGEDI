@@ -26,11 +26,11 @@ def load_data_own(data_path='Davidson'):
     
     print(df_test['labels'].value_counts()/len(df_test))
     
-    print("Using 1 % samples from train test val")
+#     print("Using 1 % samples from train test val")
     
-    df_train=df_train.groupby('labels').apply(lambda s: s.sample(int(len(df_train)/100)))
-    df_val=df_val.groupby('labels').apply(lambda s: s.sample(int(len(df_val)/100)))
-    df_test=df_test.groupby('labels').apply(lambda s: s.sample(int(len(df_test)/100)))
+#     df_train=df_train.groupby('labels').apply(lambda s: s.sample(int(len(df_train)/1)))
+#     df_val=df_val.groupby('labels').apply(lambda s: s.sample(int(len(df_val)/1)))
+#     df_test=df_test.groupby('labels').apply(lambda s: s.sample(int(len(df_test)/1)))
     
     
     
@@ -52,4 +52,8 @@ def load_data_own_gen(data_path='Davidson'):
     df_val=pd.read_csv(temp_path_val)
     temp_path_test=data_path+'Test.csv'
     df_test=pd.read_csv(temp_path_test)
+    
+    
+    
+    
     return df_train,df_val,df_test

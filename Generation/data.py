@@ -111,7 +111,7 @@ class Normal_Dexpert_Dataset(Normal_Generation_Dataset):
     def __init__(self, data, tokenizer=None,  params=None,train = False):
         self.params= params
         self.label = params['label']
-        data=data[data['label']==self.label]
+        data=data[data['labels']==self.label]
         self.data = data
         self.batch_size = self.params['batch_size']
         self.train = train
@@ -125,9 +125,6 @@ class Normal_Dexpert_Dataset(Normal_Generation_Dataset):
     
     def construct_conv(self,dict_reply_pair):
         conv = None
-        flatten = lambda l: [item for sublist in l for item in sublist]
         initiator=self.preprocess_func(dict_reply_pair['text'])
         conv = list(self.tokenizer.encode(initiator,truncation=True,max_length=int(self.max_length)))
-
-        conv = flatten(conv)
         return conv
