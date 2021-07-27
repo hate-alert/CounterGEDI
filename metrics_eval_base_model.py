@@ -4,8 +4,8 @@
 # In[1]:
 
 import sys
-path_models   = '/home/adarsh-binny' + '/HULK/Counterspeech/Saved_Models/Generator'
-path_datasets = '/home/adarsh-binny' + '/HULK/Counterspeech/Datasets'
+path_models   = '/home/adarsh-binny' + '/HULK_new/Counterspeech/Saved_Models/Generator'
+path_datasets = '/home/adarsh-binny' + '/HULK_new/Counterspeech/Datasets'
 
 
 # In[2]:

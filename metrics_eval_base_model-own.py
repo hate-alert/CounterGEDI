@@ -6,7 +6,7 @@
 import sys
 from Generation.eval import *
 from Generation.utils import *
-
+from Generation.models import *
 import json
 from os import listdir
 import glob
@@ -21,19 +21,20 @@ import time
 import itertools
 
 
-from transformers import (
-    MODEL_WITH_LM_HEAD_MAPPING,
-    WEIGHTS_NAME,
-    AdamW,
-    AutoConfig,
-    AutoModelWithLMHead,
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    get_linear_schedule_with_warmup,
-)
+# from transformers import (
+#     MODEL_WITH_LM_HEAD_MAPPING,
+#     WEIGHTS_NAME,
+#     AdamW,
+#     AutoConfig,
+#     AutoModelWithLMHead,
+#     AutoModelForCausalLM,
+#     AutoTokenizer,
+#     PreTrainedModel,
+#     PreTrainedTokenizer,
+#     get_linear_schedule_with_warmup,
+# )
 
+from transformers import AutoTokenizer
 
 # In[4]:
 
@@ -45,7 +46,7 @@ params = {
     'max_input_length':128,
     'num_beams':5,
     'no_repeat_ngram_size':5,
-    'repition_penalty': 3.5,
+    'repitition_penalty': 3.5,
     'k':100,
     'p':0.92,
     'sample':True,
@@ -55,15 +56,16 @@ params = {
     'model_name_or_path':'gpt2-medium',
     'config_name':'gpt2-medium',
     'tokenizer_name':'gpt2-medium',
-    'save_path': './../HULK/Counterspeech/Results/',
+    'save_path': './../HULK_new/Counterspeech/Results/',
     'device': 'cuda',
     'batch_size':4,
+    'generation_method':'huggingface'
 }
 
 
 
-path_models   = '../HULK/Counterspeech/Saved_Models/Generator'
-path_datasets = '../HULK/Counterspeech/Datasets'
+path_models   = '../HULK_new/Counterspeech/Saved_Models/Generator'
+path_datasets = '../HULK_new/Counterspeech/Datasets'
 models   = ["microsoft/DialoGPT-medium", "gpt2-medium"]
 datasets = listdir(path_datasets)
 
@@ -163,6 +165,38 @@ def generate(params,hate_sentences,model,tokenizer,device):
     return cntr
 
 
+
+def generate_huggingface_method(params,hate_sentences,model,tokenizer,device):
+    cntr = []
+    model.eval()
+    for step in tqdm(range(len(hate_sentences))):
+        # encode the new user input, add the eos_token and return a tensor in Pytorch
+        input_ids = tokenizer.encode(hate_sentences[step],truncation=True,max_length=params['max_input_length'],return_tensors='pt') 
+        eos = tokenizer.encode(params['sep_token'],return_tensors='pt')
+        input_ids = torch.cat((input_ids,eos),1)
+        input_ids=input_ids.to(device)
+        ####### greedy_Decoding ######
+        beam_outputs = model.generate(
+            params,
+            input_ids, 
+            pad_token_id         = tokenizer.eos_token_id,
+            max_length           = params['max_generation_length']+len(input_ids[0]),
+            min_length           = params['min_generation_length']+len(input_ids[0]),
+            top_k                = params["k"],
+            top_p                = params["p"],
+            repetition_penalty   = params["repitition_penalty"],
+            temperature          = params["temperature"],
+            num_beams            = params['num_beams'], 
+            no_repeat_ngram_size = params['no_repeat_ngram_size'],  
+            early_stopping       = params['early_stopping']
+        )
+        reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
+        cntr.append(reply)
+        if step>0 and step%100==0:
+            print("doing")
+    return cntr
+
+
 # In[6]:
 
 
@@ -185,6 +219,7 @@ def hate_refrences(data,test_set):
         mp[ht_i] = refs
         refrences.append(refs)
     hate = list(set([x[0] for x in test_set]))
+    hate.sort(key=lambda s: len(s))
     refs = [mp[ht_i] for ht_i in hate]
     return hate,refs             # a given hate instance and refrences(replies) for metrics evaluation
 
@@ -213,7 +248,7 @@ def main(params,model_path,dataset):
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
 #             deviceID = get_gpu()
-            torch.cuda.set_device(1)
+            torch.cuda.set_device(0)
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
 #             torch.cuda.set_device(args.gpuid)
@@ -224,18 +259,20 @@ def main(params,model_path,dataset):
     
     
     
-    train_path = glob.glob(path_datasets+'/*'+dataset+'*/*rain*')[0] 
-    test_path  = glob.glob(path_datasets+'/*'+dataset+'*/*es*')[0]
+    test_path  = path_datasets+'/'+dataset+'/Test.csv'
+    train_path  = path_datasets+'/'+dataset+'/Train.csv'
     print(model_path,train_path,test_path)
 
 
     # In[13]:
 
-    cache_path= '../HULK/Saved_models/'
+    cache_path= '../HULK_new/Saved_models/'
     tokenizer = AutoTokenizer.from_pretrained(model_path,cache_dir=cache_path)
-    model = AutoModelForCausalLM.from_pretrained(model_path,cache_dir=cache_path)
-    tokenizer.padding_side = "left" 
-    tokenizer.pad_token = tokenizer.eos_token # to avoid an error
+    model = Model_Generation.from_pretrained(model_path,cache_dir=cache_path)
+#     model = AutoModelForCausalLM.from_pretrained(model_path,cache_dir=cache_path)
+    if(params['generation_method']=='own'):
+        tokenizer.padding_side = "left" 
+        tokenizer.pad_token = tokenizer.eos_token # to avoid an error
     model.to(device)
     
     
@@ -258,7 +295,12 @@ def main(params,model_path,dataset):
 
 
     hate, cntr_refs = hate_refrences(data,test_set) 
-    cntr_replies    = generate(params,hate,model,tokenizer,device)
+    if(params['generation_method']=='huggingface'):
+         cntr_replies    = generate_huggingface_method(params,hate,model,tokenizer,device)
+    elif(params['generation_method']=='own'):
+        cntr_replies    = generate(params,hate,model,tokenizer,device)
+    
+    
     # In[ ]:
 
     del model
@@ -277,8 +319,10 @@ def main(params,model_path,dataset):
     print(bleu,bleu_4,diversity,novelty,meteor_)
     #### File to write the results
     model_path_modified = "-".join(model_path.split('/')[-2:])
-    write_in=params["save_path"] + model_path_modified +"_on_"+dataset+".json"
-
+    if(params['generation_method']=='huggingface'):
+        write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_huggingface.json"
+    elif(params['generation_method']=='own'):
+        write_in=params["save_path"] + model_path_modified +"_on_"+dataset+".json"
     dict_results={}
     
     dict_results['metrics']={'bleu':bleu,'bleu_4':bleu_4,'diversity':diversity,'novelty':novelty, 'meteor':meteor_}
@@ -298,20 +342,20 @@ def main(params,model_path,dataset):
     dict_results['samples']=hate_counter_replies  
     
     
-    with open(write_in, 'w') as outfile:
-            json.dump(dict_results, outfile,indent=4)
+#     with open(write_in, 'w') as outfile:
+#             json.dump(dict_results, outfile,indent=4)
     
     # In[ ]:
     
 
 if __name__ == "__main__":
     
-    saved_path='../HULK/Counterspeech/Saved_Models/Generator/'
+    saved_path='../HULK_new/Counterspeech/Saved_Models/Generator/'
     
     
 #     model_paths=["microsoft/DialoGPT-medium", "gpt2-medium", 
 #                 saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',
-#                 saved_path+'CONAN_DialoGPT-medium' , saved_path+'CONAN_DialoGPT-medium']
+#                 saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
     model_paths=[saved_path+'Create_debate_DialoGPT-medium']
     datasets = ["CONAN", "Reddit", "Gab"]
     

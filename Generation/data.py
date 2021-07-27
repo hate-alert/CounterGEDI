@@ -11,7 +11,7 @@ from keras.preprocessing.sequence import pad_sequences
 text_processor = TextPreProcessor(
     # terms that will be normalized
     normalize=['url', 'email', 'percent', 'money', 'phone', 'user',
-        'time', 'date', 'number'],
+        'time'],
     # terms that will be annotated
     fix_html=True,  # fix HTML tokens
     annotate={"hashtag", "allcaps", "elongated", "repeated",
@@ -128,3 +128,38 @@ class Normal_Dexpert_Dataset(Normal_Generation_Dataset):
         initiator=self.preprocess_func(dict_reply_pair['text'])
         conv = list(self.tokenizer.encode(initiator,truncation=True,max_length=int(self.max_length)))
         return conv
+
+    
+class Normal_Dexpert_Dataset_new(Normal_Generation_Dataset):
+    def __init__(self, data, tokenizer=None,  params=None,train = False):
+        self.params= params
+        self.label = params['label']
+        if(params['take_label']):
+            data=data[data['labels']==self.label]
+        else:
+            data=data[data['labels']!=self.label]
+        self.data = data
+        self.batch_size = self.params['batch_size']
+        self.train = train
+        self.max_length=params['max_length']        
+        self.count_dic = {}
+        self.tokenizer = tokenizer
+        self.inputs = self.process_data(self.data)
+        self.DataLoader = self.get_dataloader(self.inputs)
+    
+    def tokenize(self, dataframe):
+        inputs=[]
+        past_left=[]
+        for index,row in tqdm(dataframe.iterrows(),total=len(dataframe)):
+            conv, past_left = self.construct_conv(row,past_left)
+            inputs.append(conv)
+        return inputs
+    
+    def construct_conv(self,dict_reply_pair,past_left):
+        initiator=self.preprocess_func(dict_reply_pair['text'])
+        conv = list(self.tokenizer.tokenize(initiator))
+        conv = past_left+conv
+        conv_new=self.tokenizer.convert_tokens_to_ids(conv[:self.max_length])
+        past_left=conv[self.max_length:]
+                    
+        return conv_new,past_left

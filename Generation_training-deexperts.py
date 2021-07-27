@@ -194,9 +194,13 @@ def train_caller(params,run=None,gpu_id=0):
               
     
     
-    train_data_source = Normal_Dexpert_Dataset(train_data,tokenizer, params,train = True)
-    val_data_source = Normal_Dexpert_Dataset(valid_data,tokenizer,params)
-    test_data_source = Normal_Dexpert_Dataset(test_data,tokenizer, params)
+#     train_data_source = Normal_Dexpert_Dataset(train_data,tokenizer, params,train = True)
+#     val_data_source = Normal_Dexpert_Dataset(valid_data,tokenizer,params)
+#     test_data_source = Normal_Dexpert_Dataset(test_data,tokenizer, params)
+    
+    train_data_source = Normal_Dexpert_Dataset_new(train_data,tokenizer, params,train = True)
+    val_data_source = Normal_Dexpert_Dataset_new(valid_data,tokenizer,params)
+    test_data_source = Normal_Dexpert_Dataset_new(test_data,tokenizer, params)
     
     
     
@@ -245,7 +249,8 @@ params={
      'cache_path':'../HULK/Saved_models/',
      'task_name':'Toxicity',
      'label':'toxic',
-     'max_length': 64,
+     'take_label':False,
+     'max_length': 256,
      'train': True,
      'batch_size':8,
      'gradient_accumulation_steps':1,
@@ -277,6 +282,12 @@ if __name__ == "__main__":
                            type=str,
                            help='the label corresponding to data')
     
+    my_parser.add_argument('take_label',
+                           metavar='--take_label',
+                           type=bool,
+                           help='the label corresponding to data')
+    
+    
     my_parser.add_argument('gpu_id',
                            metavar='--gpu_id',
                            type=int,
@@ -287,7 +298,7 @@ if __name__ == "__main__":
     
     params['task_name']=args.task
     params['label']=args.label
-    
+    params['take_label']=args.take_label
     
     
     run=None
