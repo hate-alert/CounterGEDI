@@ -179,7 +179,7 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
 
 def train_caller(params,run=None):
     
-    dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
+    dataset_path='../HULK_new/Counterspeech/Datasets/'+params['task_name']+'/'
     config = AutoConfig.from_pretrained(params['model_path'],cache_dir=params['cache_path'])
     tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
@@ -195,11 +195,11 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-            deviceID = get_gpu()
-            torch.cuda.set_device(deviceID[0])
+#             deviceID = get_gpu()
+#             torch.cuda.set_device(deviceID[0])
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
-#             torch.cuda.set_device(args.gpuid)
+            torch.cuda.set_device(1)
 
     else:
         print('Since you dont want to use GPU, using the CPU instead.')
@@ -229,9 +229,9 @@ def train_caller(params,run=None):
 
 
 params={
-     'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
+     'save_path':'../HULK_new/Counterspeech/Saved_models/Generator/',
      'model_path':'microsoft/DialoGPT-medium',
-     'cache_path':'../HULK/Saved_models/',
+     'cache_path':'../HULK_new/Saved_models/',
      'task_name':'CONAN',
      'max_length': 256,
      'train': True,
@@ -246,7 +246,7 @@ params={
      'warmup_steps':0,
      'seed':42,
      'device':'cuda',
-     'logging':'neptune',
+     'logging':'local',
      'freeze_layer_count':6
 }
 
