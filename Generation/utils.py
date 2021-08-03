@@ -33,8 +33,10 @@ def save_generation_dexpert(model,tokenizer,params):
     
     if len(params['model_path'].split('/'))>1:
         params['model_path']=params['model_path'].split('/')[1]
-    
-    output_dir = params['save_path']+params['task_name']+'_dexpert_'+params['model_path']+'_'+params['label']+'/'
+    if(params['take_label']=='true'):
+        output_dir = params['save_path']+params['task_name']+'_dexpert_'+params['model_path']+'_'+params['label']+'/'
+    else:
+        output_dir = params['save_path']+params['task_name']+'_dexpert_'+params['model_path']+'_anti_'+params['label']+'/'
     # Create output directory if needed
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

@@ -134,7 +134,7 @@ class Normal_Dexpert_Dataset_new(Normal_Generation_Dataset):
     def __init__(self, data, tokenizer=None,  params=None,train = False):
         self.params= params
         self.label = params['label']
-        if(params['take_label']):
+        if(params['take_label']=='true'):
             data=data[data['labels']==self.label]
         else:
             data=data[data['labels']!=self.label]
