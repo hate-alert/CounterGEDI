@@ -21,11 +21,11 @@ import time
 
 params={
  'model_path':'gpt2',
- 'task_name':'Toxicity',
- 'save_path':'../HULK_new/Counterspeech/Saved_models/Discriminator/',
+ 'task_name':'Emotion',
+ 'save_path':'../HULK/Counterspeech/Saved_models/Discriminator/',
  'logging':'neptune',
- 'cache_path':'../HULK_new/Saved_models/',
- 'label_positive':'toxic',
+ 'cache_path':'../HULK/Saved_models/',
+ 'label_positive':'joy',
  'batch_size':8,
  'max_length':128,
  'dropout':1.0,
@@ -250,7 +250,7 @@ def train_caller(params,run=None):
         tokenizer = AutoTokenizer.from_pretrained(params['model_path'],use_fast=False, cache_dir=params['cache_path'])
         ### add model loading code 
         tokenizer.pad_token = '[PAD]'
-        dataset_path='../HULK_new/Counterspeech/Datasets/'+params['task_name']+'/'
+        dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
         train_data,valid_data,test_data,class_label=load_data_own(data_path=dataset_path)
         print(class_label)
         params['num_classes']=len(class_label)
