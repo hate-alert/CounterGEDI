@@ -220,7 +220,7 @@ def train_caller(params,run=None,gpu_id=0):
         print('Since you dont want to use GPU, using the CPU instead.')
         device = torch.device("cpu")
     
-    model = Model_Generation.from_pretrained(params['model_path'],config=config,cache_dir=params['cache_path'])
+    model = AutoModelWithLMHead.from_pretrained(params['model_path'],config=config,cache_dir=params['cache_path'])
     for param in model.transformer.wpe.parameters():
             param.requires_grad = False
     for param in model.transformer.wte.parameters():
@@ -253,12 +253,12 @@ params={
      'max_length': 256,
      'train': True,
      'batch_size':8,
-     'gradient_accumulation_steps':1,
-     'learning_rate':5e-6,
+     'gradient_accumulation_steps':100,
+     'learning_rate':3e-5,
      'weight_decay':0.0,
      'adam_epsilon':1e-8,
      'max_grad_norm':1.0,
-     'num_train_epochs':10,
+     'num_train_epochs':20,
      'max_steps':-1,
      'warmup_steps':0,
      'seed':42,
