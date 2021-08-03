@@ -258,7 +258,7 @@ params={
      'weight_decay':0.0,
      'adam_epsilon':1e-8,
      'max_grad_norm':1.0,
-     'num_train_epochs':20,
+     'num_train_epochs':10,
      'max_steps':-1,
      'warmup_steps':0,
      'seed':42,
