@@ -1262,6 +1262,22 @@ class Model_Generation(GPT2PreTrainedModel):
         self.init_weights()
         self.model_parallel = False
         self.device_map = None
+        try:
+            self.reduction = config.reduction
+        except:
+            self.reduction = None
+        
+        try:
+            if config.bias>0:
+                self.bias = nn.Parameter(torch.zeros((1,config.bias)))
+            if config.logit_scale:
+                self.logit_scale = nn.Parameter(torch.ones((1,1)))
+            print("Loaded config and bias")
+            
+        except:
+            print("no logit scale or bias initialized for gpt2")
+        
+    
     def forward(
         self,
         input_ids=None,
@@ -1317,7 +1333,12 @@ class Model_Generation(GPT2PreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
+            if(self.reduction=='None'):
+                loss_fct = CrossEntropyLoss(reduction = 'none')
+            else:
+                loss_fct = CrossEntropyLoss()
+            
+            
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:

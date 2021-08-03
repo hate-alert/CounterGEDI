@@ -179,7 +179,7 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
 
 
 def train_caller(params,run=None,gpu_id=0):
-    dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
+    dataset_path='../HULK_new/Counterspeech/Datasets/'+params['task_name']+'/'
     config = AutoConfig.from_pretrained(params['model_path'],cache_dir=params['cache_path'])
     tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
@@ -244,9 +244,9 @@ def train_caller(params,run=None,gpu_id=0):
 
 
 params={
-     'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
+     'save_path':'../HULK_new/Counterspeech/Saved_models/Generator/',
      'model_path':'gpt2',
-     'cache_path':'../HULK/Saved_models/',
+     'cache_path':'../HULK_new/Saved_models/',
      'task_name':'Toxicity',
      'label':'toxic',
      'take_label':False,
@@ -263,7 +263,7 @@ params={
      'warmup_steps':0,
      'seed':42,
      'device':'cuda',
-     'logging':'local',
+     'logging':'neptune',
      'freeze_layer_count':-1
 }
 
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     
     my_parser.add_argument('take_label',
                            metavar='--take_label',
-                           type=bool,
+                           type=str,
                            help='the label corresponding to data')
     
     
@@ -300,6 +300,7 @@ if __name__ == "__main__":
     params['label']=args.label
     params['take_label']=args.take_label
     
+    print(params['take_label'])
     
     run=None
     if(params['logging']=='neptune'):
