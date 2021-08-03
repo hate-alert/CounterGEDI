@@ -32,15 +32,19 @@ from transformers import AutoTokenizer,AutoModelForCausalLM
 
 params = {
     'sep_token':'<|endoftext|>',
-    'max_generation_length': 100,
+    'max_generation_length': 200,
     'min_generation_length':40,
     'max_input_length':128,
-    'num_beams':5,
+    'num_beams':1,
     'no_repeat_ngram_size':5,
     'repitition_penalty': 3.5,
+    'control_type':'gedi',
     'k':100,
     'p':0.92,
-    'filter_p':0.9,
+    'filter_p':0.8,
+    'target_p':0.8,
+    'disc_weight':30,
+    'class_bias':0,
     'sample':True,
     'temperature':1.2,
     'early_stopping':True,
@@ -52,8 +56,8 @@ params = {
     'device': 'cuda',
     'batch_size':4,
     'cache_path':'./../HULK_new/Saved_models/',
-    'generation_method':'huggingface'
-
+    'generation_method':'huggingface',
+    'class_bias':0,
 }
 
 
@@ -174,7 +178,7 @@ def generate(params,hate_sentences,model,controller_list,tokenizer,device,use_co
     return cntr
 
 
-def generate_huggingface_method(params,hate_sentences,model,controller_list,tokenizer,device,use_control=False):
+def generate_huggingface_method(params,hate_sentences,model,controller_list,tokenizer,device,control_type='dexpert'):
     cntr = []
     model.eval()
     
@@ -193,7 +197,14 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
         beam_outputs = model.generate(
             controller_alphas=alpha_controller,
             controller_list=controller_list,
-            use_control=use_control,
+            control_type=control_type,
+            positive_class='true',
+            negative_class='false',
+            tokenizer=tokenizer,
+            class_bias=params['class_bias'],
+            filter_p=params['filter_p'],
+            target_p=params['target_p'],
+            disc_weight=params['disc_weight'],
             input_ids=input_ids, 
             pad_token_id         = tokenizer.eos_token_id,
             max_length           = params['max_generation_length']+len(input_ids[0]),
@@ -202,7 +213,7 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             top_p                = params["p"],
             repetition_penalty   = params["repitition_penalty"],
             temperature          = params["temperature"],
-            num_beams            = 1, 
+            num_beams            = params['num_beams'], 
             do_sample            = params['sample'],
             no_repeat_ngram_size = params['no_repeat_ngram_size'],  
             early_stopping       = params['early_stopping']
@@ -311,6 +322,7 @@ def hate_refrences(data,test_set):
 
 def main(params,model_path,dataset):
     path_models   = './../HULK_new/Counterspeech/Saved_Models/Generator'
+    path_models_disc   = './../HULK_new/Counterspeech/Saved_Models/Discriminator'
     path_datasets = './../HULK_new/Counterspeech/Datasets'
 
     
@@ -320,7 +332,7 @@ def main(params,model_path,dataset):
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
 #             deviceID = get_gpu()
-            torch.cuda.set_device(1)
+            torch.cuda.set_device(0)
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
 #             torch.cuda.set_device(args.gpuid)
@@ -338,12 +350,25 @@ def main(params,model_path,dataset):
     
     #Politeness_dexpert_gpt2_polite
     controller_list=[]
-    for task in params['task_name']:
-        path_model_task=path_models+'/'+task[0]+'_dexpert_gpt2_'+task[1]+'/'
-        model_temp=AutoModelForCausalLM.from_pretrained(path_model_task,cache_dir=cache_path)
-        model_temp.to(device)
-        model_temp.eval()
-        controller_list.append(model_temp)
+    if(params['control_type']=='dexpert'):
+        for task in params['task_name']:
+            path_model_task=path_models+'/'+task[0]+'_dexpert_gpt2_'+task[1]+'/'
+            model_temp=AutoModelForCausalLM.from_pretrained(path_model_task,cache_dir=cache_path)
+            model_temp.to(device)
+            model_temp.eval()
+            controller_list.append(model_temp)
+    elif(params['control_type']=='gedi'):
+        if(len(params['task_name'])>1):
+            print("gedi model controls attribute one at a time")
+        else:
+            print("loaded_gedi")
+            task =params['task_name'][0]
+            path_model_task=path_models_disc+'/'+task[0]+'_gedi_gpt2_'+task[1]+'/'
+            model_temp=Model_Generation.from_pretrained(path_model_task,cache_dir=cache_path)
+            model_temp.to(device)
+            model_temp.eval()
+            controller_list.append(model_temp)
+    
     
     tokenizer = AutoTokenizer.from_pretrained(model_path,cache_dir=cache_path)
     model = Model_Generation.from_pretrained(model_path,cache_dir=cache_path)
@@ -370,7 +395,7 @@ def main(params,model_path,dataset):
     
     
     if(params['generation_method']=='huggingface'):
-        cntr_replies = generate_huggingface_method(params,hate,model,controller_list,tokenizer,device,use_control=False)
+        cntr_replies = generate_huggingface_method(params,hate,model,controller_list,tokenizer,device,control_type=params['control_type'])
     elif(params['generation_method']=='own'):
         cntr_replies = generate_single_own(params,hate,model,controller_list,tokenizer,device,use_control=True)
     
@@ -410,7 +435,10 @@ def main(params,model_path,dataset):
     
     
     if(params['generation_method']=='huggingface'):
-        write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_huggingface_"+ts+".json"
+        if(params['control_type']=='dexpert'):
+            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_huggingface_"+ts+".json"
+        elif(params['control_type']=='gedi'):
+            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_gedi_huggingface_"+ts+".json"
     elif(params['generation_method']=='own'):
         write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_"+ts+".json"
 
@@ -425,12 +453,11 @@ if __name__ == "__main__":
     saved_path='../HULK_new/Counterspeech/Saved_Models/Generator/'
     
     
-#     model_paths=["microsoft/DialoGPT-medium", "gpt2-medium", 
-#                 saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',
-#                 saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
-    #model_paths=[saved_path+'Create_debate_DialoGPT-medium']
-    model_paths=[saved_path+'Create_debate_DialoGPT-medium']
-    datasets = ["Reddit","CONAN","Gab"]
+    #model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',
+    #saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
+    #model_paths=[saved_path+'CONAN_DialoGPT-medium']
+    model_paths=['microsoft/DialoGPT-medium']
+    datasets = ["CONAN","Reddit","Gab"]
     
     total = [model_paths, datasets]
     for element in itertools.product(*total):

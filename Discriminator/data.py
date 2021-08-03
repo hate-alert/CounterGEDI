@@ -111,16 +111,27 @@ class Hatexplain_dataset():
     
     
 class Normal_Dataset():
-    def __init__(self, data, class_labels=None, tokenizer=None,  params=None,train = False):
+    def __init__(self, data, class_labels=None, dict_map=None,tokenizer=None,  params=None,train = False):
         self.data = data
         self.params= params
         self.batch_size = self.params['batch_size']
         self.train = train
-        self.label_dict={}
-        count_label=0
-        for label_name in class_labels:
-            self.label_dict[label_name]=count_label
-            count_label+=1
+        if(dict_map is not None):
+            self.label_dict={}
+            print(dict_map)
+            for key in dict_map:
+                if(dict_map[key]=='true'):
+                    self.label_dict[key]=1
+                else:
+                    self.label_dict[key]=0
+            print(self.label_dict)
+        else:
+            self.label_dict={}
+            count_label=0
+            for label_name in class_labels:
+                self.label_dict[label_name]=count_label
+                count_label+=1
+            
         self.max_length=params['max_length']        
         self.count_dic = {}
         self.tokenizer = tokenizer
@@ -139,33 +150,16 @@ class Normal_Dataset():
         sent = re.sub(r"[<\*>]", " ",sent)
         return sent
     
-#     def dummy_attention(self,inputs):
-#         attn=[]
-#         for sent in inputs['input_ids']:
-#             temp=[0]*len(sent)
-#             attn.append(temp)
-#         return attn
+
     def tokenize(self, sentences):
         input_ids, attention_masks = [], []
         for sent in sentences:
             inputs=self.tokenizer.encode(sent,add_special_tokens=False,
                                               truncation=True,
                                               max_length=(self.max_length-1))
-#             encoded_dict = self.tokenizer.encode_plus(sent,
-#                                                     add_special_tokens=True,
-#                                                     max_length=self.max_length, 
-#                                                     padding='max_length', 
-#                                                     return_attention_mask = True,
-#                                                     return_tensors = 'pt', 
-#                                                     truncation = True)
-            inputs = [50256] + inputs
+            #inputs = [50256] + inputs
             input_ids.append(inputs)
             attention_masks.append([1]*len(inputs))
-            #attention_masks.append(encoded_dict['attention_mask'])
-        
-#         input_ids = torch.cat(input_ids, dim=0)
-#         attention_masks = torch.cat(attention_masks, dim=0)
-        
         return input_ids,attention_masks
     
     
@@ -179,9 +173,8 @@ class Normal_Dataset():
                 sentence = self.preprocess_func("dummy text")
             sentences.append(sentence)
             labels.append(label)
+            #print(sentence,label)
         inputs, attn_mask = self.tokenize(sentences)
-        #attn = self.dummy_attention(inputs)
-        #return inputs, torch.Tensor(labels), torch.Tensor(attn)
         return inputs, attn_mask, torch.Tensor(labels)
     
     def get_attention_mask(self,attn_mask, maxlen=128):
@@ -205,4 +198,6 @@ class Normal_Dataset():
         else:
             sampler = SequentialSampler(data)
         return DataLoader(data, sampler=sampler, batch_size=self.batch_size, drop_last=True)
+
+    
     

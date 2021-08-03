@@ -36,7 +36,7 @@ from transformers.generation_logits_process import (
     TopPLogitsWarper,
 )
 from transformers.utils import logging
-
+import math
 
 logger = logging.get_logger(__name__)
 
@@ -602,7 +602,14 @@ class GenerationMixin:
         self,
         controller_alphas=None,
         controller_list=None,
-        use_control=False,
+        control_type='dexpert',
+        positive_class='true',
+        negative_class='false',
+        tokenizer=None,
+        class_bias=0,
+        disc_weight=30,
+        filter_p=0,
+        target_p=0,
         input_ids: Optional[torch.LongTensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
@@ -908,7 +915,7 @@ class GenerationMixin:
                 input_ids,
                 controller_alphas=controller_alphas,
                 controller_list=controller_list,
-                use_control=use_control,
+                control_type=control_type,
                 logits_processor=logits_processor,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
@@ -937,7 +944,14 @@ class GenerationMixin:
                 input_ids,
                 controller_alphas=controller_alphas,
                 controller_list=controller_list,
-                use_control=use_control,
+                control_type=control_type,
+                positive_class=positive_class,
+                negative_class=negative_class,
+                class_bias=class_bias,
+                disc_weight=disc_weight,
+                filter_p=filter_p,
+                target_p=target_p,
+                tokenizer=tokenizer,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 max_length=max_length,
@@ -1063,7 +1077,7 @@ class GenerationMixin:
         input_ids: torch.LongTensor,
         controller_alphas=None,
         controller_list=None,
-        use_control=False,
+        control_type='dexpert',
         logits_processor: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
@@ -1188,19 +1202,11 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
             
-            if(len(controller_list)>0 and use_control):
-                    controller_logits=[]
-                    for model_temp in controller_list:
-                        outputs = model_temp(
-                            **model_inputs,
-                            return_dict=True,
-                            output_attentions=output_attentions,
-                            output_hidden_states=output_hidden_states,
-                        )
-                        next_token_logits = outputs.logits[:, -1, :]
-                        controller_logits.append(next_token_logits)
-                    for i in range(len(controller_list)):
-                        next_token_logits += controller_alphas[i] * (controller_logits[i])
+            if(count>3):
+                if(control_type=='dexpert' and len(controller_list)>0):
+                    next_token_logits=self.adjust_tokens_dexpert(outputs_temp,next_token_logits,controller_list,controller_alpha)
+                    
+            
             print(next_token_logits.shape)
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -1269,13 +1275,156 @@ class GenerationMixin:
                 )
         else:
             return input_ids
+    
+    
+    def adjust_tokens_dexpert(self,inputs,next_token_logits,\
+                              controller_list,controller_alphas,model_kwargs,\
+                              output_attentions,output_hidden_states):
+        print("inside dexpert")
+        model_inputs_controller = self.prepare_inputs_for_generation(inputs, **model_kwargs)
+        controller_logits=[]
+        for model_temp in controller_list:
+            outputs = model_temp(
+                **model_inputs_controller,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            next_token_logits_temp = outputs.logits[:, -1, :]
+            controller_logits.append(next_token_logits_temp)
+        for i in range(len(controller_list)):
+            next_token_logits += controller_alphas[i] * (controller_logits[i])
 
+        return next_token_logits
+    
+    
+    def setup_gedi(self,input_ids,positive_code,negative_code,tokenizer):
+        pt_id = tokenizer.encode(positive_code)[0]
+        nt_id = tokenizer.encode(negative_code)[0]
+        #prepending tokens corresponding to 'positive' and 'negative' to the inputs
+        seq_a = (torch.ones(input_ids.shape[0])*pt_id).type_as(input_ids).view(-1,1)
+        seq_b = (torch.ones(input_ids.shape[0])*nt_id).type_as(input_ids).view(-1,1)
+        seq_a = torch.cat((seq_a, input_ids), dim=1)[:,:]
+        seq_b = torch.cat((seq_b, input_ids), dim=1)[:,:]
+        print(seq_a)
+        bsz = seq_a.shape[0]
+        seq_batched = torch.cat((seq_a,seq_b),dim=0)
+        return bsz,seq_batched 
+    
+    def adjust_tokens_gedi(self,batch_size,seq_batched,next_token_logits,inputs,gedi_model,\
+                           gedi_past,class_bias,disc_weight,filter_p,target_p,count,\
+                           logits_r=None,logp_desired=None,logp_undesired=None):
+        if gedi_past is not None:
+            input_batched = torch.cat((inputs,inputs),dim=0)
+            seq_batched = torch.cat((seq_batched,input_batched),dim=1)
+            inputs_total = gedi_model.prepare_inputs_for_generation(seq_batched, past=gedi_past)
+        else:
+            inputs_total = {"input_ids": seq_batched, "past_key_values":gedi_past}
+            
+         
+        gedi_outputs = gedi_model(**inputs_total)
+        if gedi_past is None:
+            if gedi_outputs[0].shape[1]>1:
+                old_logits = torch.log_softmax(gedi_outputs[0][:, :-1, :],-1)
+                shift_logits = gedi_outputs[0][..., :-1, :].contiguous()
+                shift_labels = seq_batched[..., 1:].contiguous()
+                loss_fct = torch.nn.CrossEntropyLoss(reduction="none")
+                logits_r  = -1*loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                logits_r = logits_r.view(seq_batched.shape[0], -1)
+
+                seq_len = logits_r.shape[1]
+
+                logits_r = torch.sum(logits_r,1)
+
+
+                logits_pos,logits_neg = torch.split(logits_r/seq_len,inputs.shape[0])
+
+
+                logits0 = torch.stack((logits_pos,logits_neg),1)
+
+                if "logit_scale" in dir(gedi_model):
+                    logits0 = gedi_model.logit_scale*logits0
+                if "bias" in dir(gedi_model):                    
+                    logits0 = logits0 + gedi_model.bias
+                if not (class_bias==0):
+                    logits0[:,0] += class_bias
+                
+
+                logp_desired = torch.log_softmax(logits0,-1)[:,0]
+                logp_undesired = torch.log_softmax(logits0,-1)[:,1]
+            
+        gedi_logits= (torch.log_softmax(gedi_outputs[0][:, -1, :],-1)+logits_r.unsqueeze(1))
+        
+        print(gedi_logits.shape)
+
+        
+        logits_pos,logits_neg = torch.split(gedi_logits/count,inputs.shape[0])
+        
+        print(logits_pos.shape)
+        
+        
+        logits = torch.stack((logits_pos,logits_neg),2)
+        if "logit_scale" in dir(gedi_model):
+            logits = gedi_model.logit_scale*logits
+
+        if "bias" in dir(gedi_model):
+            logits = logits + gedi_model.bias
+
+        if not class_bias == 0:
+            logits[:,:,0] += class_bias
+
+        logp_desired_t = torch.log_softmax(logits,-1)[:,:,0]
+        logp_undesired_t = torch.log_softmax(logits,-1)[:,:,1]
+        next_token_logits = torch.log_softmax(1*next_token_logits,-1) + disc_weight*(logp_desired_t) 
+
+        sorted_logps, sorted_indices = torch.sort(logp_desired_t, descending=False)
+
+        peak = torch.max(next_token_logits,1).values.unsqueeze(1)
+        
+        next_token_p = torch.softmax(next_token_logits,-1)
+        for i in range(0,next_token_logits.shape[0]):
+
+
+            if True:
+                p_sorted = next_token_p[i,sorted_indices[i]]
+                cumulative_probs = torch.cumsum(p_sorted, dim=-1)
+
+                logp_desired_sorted = logp_desired_t[i,sorted_indices[i]]
+                ind_to_remove =  (cumulative_probs <filter_p)  & (logp_desired_sorted<(math.log(target_p)))
+
+                next_token_logits[i,sorted_indices[i][ind_to_remove]]-=10000
+
+
+
+                if ind_to_remove[-1]:
+                    print("error, removing everything is likely not intended behavior")
+                    ind_to_remove[-1]=True
+
+        return next_token_logits,gedi_outputs,logits_r,logp_desired,logp_undesired,logp_desired_t,logp_undesired_t,gedi_logits
+        
+    
+    def prepare_inputs_for_generation_gedi(self, input_ids, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if "past_key_values" in kwargs and kwargs["past_key_values"]:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        inputs = {"input_ids": input_ids}
+        inputs.update(kwargs)
+        return inputs
+    
     def sample(
         self,
         input_ids: torch.LongTensor,
         controller_alphas=None,
         controller_list=None,
-        use_control=False,
+        control_type='dexpert',
+        positive_class='true',
+        negative_class='false',
+        class_bias=0,
+        disc_weight=20,
+        filter_p=0.1,
+        target_p=0.1,
+        tokenizer=None,
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
@@ -1398,16 +1547,23 @@ class GenerationMixin:
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
             input_ids, max_length
         )
-        current_length=input_ids.shape[1]
         count=0
+        gedi_count=0
+        
+        outputs_temp=None
         # auto-regressive generation
+        flag_setup=0
+        past = None
+        gedi_past = None
+        desired_labels = torch.zeros(input_ids.shape[0],dtype=torch.long).to(input_ids.device)
+        rewards=None
+        
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            
             if(count==0):
                 print(model_inputs['input_ids'].shape)
-           
+            
 
             # forward pass to get next token
             outputs = self(
@@ -1418,24 +1574,42 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
             
-            if(count>3 and len(controller_list)>0 and use_control):
-                    model_inputs_controller = self.prepare_inputs_for_generation(input_ids[:,current_length:], **model_kwargs)
             
-                    controller_logits=[]
-                    for model_temp in controller_list:
-                        outputs = model_temp(
-                            **model_inputs_controller,
-                            return_dict=True,
-                            output_attentions=output_attentions,
-                            output_hidden_states=output_hidden_states,
-                        )
-                        next_token_logits = outputs.logits[:, -1, :]
-                        controller_logits.append(next_token_logits)
-                    for i in range(len(controller_list)):
-                        next_token_logits += controller_alphas[i] * (controller_logits[i])
-
-            count+=1
-
+            print("==============================")
+            print(torch.argmax(next_token_logits, dim=-1))
+            
+            
+            #print(control_type)
+            
+            if(count>3):
+                if(control_type=='dexpert' and len(controller_list)>0):
+                    print("inside dexpert")
+                    next_token_logits=self.adjust_tokens_dexpert(outputs_temp,next_token_logits,\
+                                                              controller_list,controller_alphas,model_kwargs,\
+                                                              output_hidden_states,output_attentions)
+                    
+                if(control_type=='gedi' and len(controller_list)>0):
+                    if(flag_setup==0):
+                        batch_size,merged_sequence=self.setup_gedi(outputs_temp,positive_class,negative_class,tokenizer)
+                        print(merged_sequence.shape)
+                        gedi_pad_lens=None
+                        flag_setup=1
+                        logp_desired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
+                        logp_undesired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
+                        logits_r = torch.zeros(outputs_temp.shape[0]*2).to(outputs_temp.device)
+                    next_token_logits,gedi_outputs,logits_r,logp_desired,logp_undesired,\
+                    logp_desired_t,logp_undesired_t,gedi_logits=\
+                                   self.adjust_tokens_gedi(batch_size,merged_sequence,\
+                                   next_token_logits,outputs_temp,\
+                                   controller_list[0],gedi_past,class_bias,\
+                                   disc_weight,filter_p,target_p,gedi_count,
+                                   logits_r,logp_desired,logp_undesired)
+                    
+                    if not (controller_list[0] is None):
+                        gedi_past = gedi_outputs.past_key_values
+                    
+            print(torch.argmax(next_token_logits, dim=-1))
+            print("==============================")
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             next_token_scores = logits_warper(input_ids, next_token_scores)
@@ -1459,16 +1633,35 @@ class GenerationMixin:
             # sample
             probs = F.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            
+            if(count>3 and control_type=='gedi'):
+                token_list = next_tokens.tolist()+next_tokens.tolist()
+                
+                for i in range(0,len(token_list)):
+                    logits_r[i] = gedi_logits[i,token_list[i]]
 
+                for i in range(0,len(next_tokens)):
+                    logp_desired[i] = logp_desired_t[i,next_tokens[i]]
+                    logp_undesired[i] = logp_undesired_t[i,next_tokens[i]]
+
+            
             # add code that transfomers next_tokens to tokens_to_add
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
 
             # add token and increase length by one
+            if(outputs_temp is None):
+                outputs_temp=next_tokens[:, None]
+            else:
+                outputs_temp=torch.cat([outputs_temp, next_tokens[:, None]], dim=-1)
+            
+            
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             cur_len = cur_len + 1
-
+            count+=1
+            gedi_count+=1
+            
             # update sequence length
             if eos_token_id is not None:
                 sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
@@ -1483,6 +1676,10 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
+        
+        
+        if control_type=='gedi' and len(controller_list)>0:
+            print("GeDi estimates the probability that it sample is desired class is: " + str(torch.exp(logp_desired[0]).item()))
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
