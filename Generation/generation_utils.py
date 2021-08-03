@@ -39,7 +39,7 @@ from transformers.utils import logging
 import math
 
 logger = logging.get_logger(__name__)
-
+debug=True
 
 @dataclass
 class GreedySearchDecoderOnlyOutput(ModelOutput):
@@ -610,6 +610,7 @@ class GenerationMixin:
         disc_weight=30,
         filter_p=0,
         target_p=0,
+        unpertubed_count=3,
         input_ids: Optional[torch.LongTensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
@@ -949,6 +950,7 @@ class GenerationMixin:
                 negative_class=negative_class,
                 class_bias=class_bias,
                 disc_weight=disc_weight,
+                unpertubed_count=unpertubed_count,
                 filter_p=filter_p,
                 target_p=target_p,
                 tokenizer=tokenizer,
@@ -1420,6 +1422,7 @@ class GenerationMixin:
         control_type='dexpert',
         positive_class='true',
         negative_class='false',
+        unpertubed_count=3,
         class_bias=0,
         disc_weight=20,
         filter_p=0.1,
@@ -1575,13 +1578,16 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
             
             
-            print("==============================")
-            print(torch.argmax(next_token_logits, dim=-1))
             
+            if(debug==True):
+                print("==============================")
+                max_before_control=torch.argmax(next_token_logits, dim=-1).tolist()
+                print("token: ",tokenizer.convert_ids_to_tokens(max_before_control)," token id: ",max_before_control)
+
             
             #print(control_type)
             
-            if(count>3):
+            if(count>unpertubed_count):
                 if(control_type=='dexpert' and len(controller_list)>0):
                     print("inside dexpert")
                     next_token_logits=self.adjust_tokens_dexpert(outputs_temp,next_token_logits,\
@@ -1607,9 +1613,11 @@ class GenerationMixin:
                     
                     if not (controller_list[0] is None):
                         gedi_past = gedi_outputs.past_key_values
-                    
-            print(torch.argmax(next_token_logits, dim=-1))
-            print("==============================")
+            
+            if(debug==True):
+                max_after_control=torch.argmax(next_token_logits, dim=-1).tolist()
+                print("token: ",tokenizer.convert_ids_to_tokens(max_after_control)," token id: ",max_after_control)
+                print("==============================")
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             next_token_scores = logits_warper(input_ids, next_token_scores)
@@ -1634,7 +1642,7 @@ class GenerationMixin:
             probs = F.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             
-            if(count>3 and control_type=='gedi'):
+            if(count>unpertubed_count and control_type=='gedi'):
                 token_list = next_tokens.tolist()+next_tokens.tolist()
                 
                 for i in range(0,len(token_list)):

@@ -19,37 +19,18 @@ import argparse
 import json
 import time
 
-params={
- 'model_path':'gpt2',
- 'task_name':'Toxicity',
- 'save_path':'../HULK_new/Counterspeech/Saved_models/Discriminator/',
- 'logging':'neptune',
- 'cache_path':'../HULK_new/Saved_models/',
- 'label_positive':'toxic',
- 'batch_size':8,
- 'max_length':128,
- 'dropout':1.0,
- 'device':'cuda',
- 'epochs':10,
- 'seed':42,
- 'learning_rate':0.001,
- 'logging':'local',
- 'bias_own':2,
- 'logit_scale':True,
- 'gradient_accumulation_steps':1,
- 'gen_weight':0.8,
- 'max_grad_norm':1,   
- 'saved_steps':500
-
-}
+HULK_path='../HULK_new/'
 
 
-def get_gpu():
+
+
+def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
         tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 0.9, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
-        if len(tempID) > 0:
+        print(tempID)
+        if len(tempID) > 0 and (tempID[0]==gpu_id):
             print("Found a gpu")
             print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
             deviceID=tempID
@@ -78,10 +59,10 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
     optimizer.zero_grad()
     global_step = 0         
     best_macro_f1_val = 0
-    best_macro_f1_test = 0
-    best_accuracy_test = 0
-    best_pre_test = 0
-    best_rec_test = 0
+    best_macro_f1_val = 0
+    best_accuracy_val = 0
+    best_pre_val = 0
+    best_rec_val = 0
     
     best_model = None
     # current_epoch, best_weighted_f1 = load_metrics(filepath, model, optimizer
@@ -142,11 +123,7 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
             loss_a = (loss_a/loss_lengths).sum(dim=1)
             loss_b= (loss_b/loss_lengths).sum(dim=1)
             
-            
-            
-#             print(gen_loss_a.shape)
-#             print(gen_loss_b.shape)
-            
+                       
             class_logits = torch.stack((-loss_a, -loss_b), dim=1) #(bsz, 2) dimensional
             b_labels[b_labels == 2] = 1  #turning 3-ary to binary
             class_labels = b_labels
@@ -173,7 +150,7 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
             
             
             if params['gradient_accumulation_steps'] > 1:
-                loss = loss / args.gradient_accumulation_steps
+                loss = loss / params['gradient_accumulation_steps']
 
             
             if(params['logging']=='local'):
@@ -198,16 +175,14 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
                 global_step += 1
 
             
-            if(global_step%1000==0):
+            if(global_step%params['save_step']==0):
 #                 print("running training")
 #                 macro_f1_train,accuracy_train, pre_train, rec_train,overall_gen_loss_train = evaluate_gedi(training_dataloader, params,model,tokenizer,device)
 
                 print("running validation")
                 macro_f1_val,accuracy_val, pre_val, rec_val,overall_gen_loss_val = evaluate_gedi(validation_dataloader, params,model,tokenizer,device)
-
-                print("running test")
-                macro_f1_test,accuracy_test, pre_test, rec_test,overall_gen_loss_test = evaluate_gedi(test_dataloader, params,model,tokenizer,device)
-
+                
+            
                 if(params['logging']=='neptune'):
                     #### val scores updated
                     run["label/val/f1"].log(macro_f1_val)
@@ -215,42 +190,49 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
                     run["label/val/positive_class_precision"].log(pre_val)
                     run["label/val/positive_class_recall"].log(rec_val)
                     run["label/val/gen_loss"].log(overall_gen_loss_val)
-
-                    #### test scores updated
-                    run["label/test/f1"].log(macro_f1_test)
-                    run["label/test/accuracy"].log(accuracy_test)
-                    run["label/test/positive_class_precision"].log(pre_test)
-                    run["label/test/positive_class_recall"].log(rec_test)
-                    run["label/test/gen_loss"].log(overall_gen_loss_test)
-
                 else:
                     #print("Train Macro F1: {0:.3f}".format(macro_f1_train))
                     print("Val Macro F1: {0:.3f}".format(macro_f1_val))
-                    print("Test Macro F1: {0:.3f}".format(macro_f1_test))
                     print("Val Gen loss: {0:.3f}".format(overall_gen_loss_val))
-                    print("Test Gen loss: {0:.3f}".format(overall_gen_loss_test))
-
-                if macro_f1_val > best_macro_f1_val:
+                
+                if macro_f1_val > best_macro_f1_val or best_gen_val_loss > overall_gen_loss_val:
                     best_macro_f1_val = macro_f1_val
-                    best_macro_f1_test = macro_f1_test
-                    best_accuracy_test = accuracy_test
-                    best_pre_test = pre_test
-                    best_rec_test = rec_test
+                    best_accuracy_val = accuracy_val
+                    best_pre_val = pre_val
+                    best_rec_val = rec_val
+                    best_gen_val_loss=best_gen_val_loss
                     save_generation_gedi(model,tokenizer,params)
             
+                    
+
+#         print("running test")
+#         macro_f1_test,accuracy_test, pre_test, rec_test,overall_gen_loss_test = evaluate_gedi(test_dataloader, params,model,tokenizer,device)
+#         if(params['logging']=='neptune'):
+#             #### test scores updated
+#             run["label/test/f1"].log(macro_f1_test)
+#             run["label/test/accuracy"].log(accuracy_test)
+#             run["label/test/positive_class_precision"].log(pre_test)
+#             run["label/test/positive_class_recall"].log(rec_test)
+#             run["label/test/gen_loss"].log(overall_gen_loss_test)
+
+#         else:
+#             print("Test Macro F1: {0:.3f}".format(macro_f1_test))
+#             print("Test Gen loss: {0:.3f}".format(overall_gen_loss_test))
+
+                
     if(params['logging']=='neptune'):
       
-        run["label/test/best_f1"].log(best_macro_f1_test)
-        run["label/test/best_accuracy"].log(best_accuracy_test)
-        run["label/test/best_positive_class_precision"].log(best_pre_test)
-        run["label/test/best_positive_class_recall"].log(best_rec_test)        
+        run["label/val/best_f1"].log(best_macro_f1_val)
+        run["label/val/best_accuracy"].log(best_accuracy_val)
+        run["label/val/best_positive_class_precision"].log(best_pre_val)
+        run["label/val/best_positive_class_recall"].log(best_rec_val)        
 
 
-def train_caller(params,run=None):
+def train_caller(params,run=None,gpu_id=0):
         tokenizer = AutoTokenizer.from_pretrained(params['model_path'],use_fast=False, cache_dir=params['cache_path'])
         ### add model loading code 
         tokenizer.pad_token = '[PAD]'
-        dataset_path='../HULK_new/Counterspeech/Datasets/'+params['task_name']+'/'
+        dataset_path=HULK_path+'Counterspeech/Datasets/'+params['task_name']+'/'
         train_data,valid_data,test_data,class_label=load_data_own(data_path=dataset_path)
         print(class_label)
         params['num_classes']=len(class_label)
@@ -269,13 +251,6 @@ def train_caller(params,run=None):
         
         ## set discriminator loss
         params['disc_weight']=1-params['gen_weight']
-        
-        
-        
-        
-        
-        
-        
         train_data_source = Normal_Dataset(train_data,class_label,dict_map,tokenizer, params,train = True)
         val_data_source = Normal_Dataset(valid_data,class_label,dict_map,tokenizer,params)
         test_data_source = Normal_Dataset(test_data,class_label,dict_map,tokenizer, params)
@@ -288,7 +263,7 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-            deviceID = get_gpu()
+            deviceID = get_gpu(gpu_id)
             torch.cuda.set_device(deviceID[0])
             #### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
@@ -313,33 +288,64 @@ def train_caller(params,run=None):
         for param in model.transformer.wte.parameters():
                 param.requires_grad = False
 
-#         model.train_custom()
-
-#         discriminator_meta = {
-#             "class_size": len(train_data_source.label_dict),
-#             "embed_size": model.embed_size,
-#             "pretrained_model": params['model_path'],
-#             "class_vocab": train_data_source.label_dict,
-#             "default_class": 1,
-#         }
-        
-#         save_detection_meta(discriminator_meta,params)
-
-    
-# #         model = Model_Label.from_pretrained(params['model_path'], cache_dir=params['cache_path'],params=params,output_attentions = True,output_hidden_states = False).to(device)
         train(train_data_source.DataLoader, val_data_source.DataLoader,test_data_source.DataLoader,model,tokenizer,params,run,dict_map,device)
         
     
-    
+params={
+ 'model_path':'gpt2',
+ 'task_name':'Toxicity',
+ 'save_path':HULK_path+'Counterspeech/Saved_models/Discriminator/',
+ 'logging':'neptune
+ 'cache_path':HULK_path+'Saved_models/',
+ 'label_positive':'toxic',
+ 'batch_size':8,
+ 'max_length':128,
+ 'dropout':1.0,
+ 'device':'cuda',
+ 'epochs':5,
+ 'seed':42,
+ 'learning_rate':2e-5,
+ 'bias_own':2,
+ 'logit_scale':True,
+ 'gradient_accumulation_steps':16,
+ 'gen_weight':0.8,
+ 'max_grad_norm':1,   
+ 'save_step':1000
+
+}
 if __name__ == "__main__":
     fix_the_random(seed_val = params['seed'])
+    
+    
+    my_parser = argparse.ArgumentParser()
+    my_parser.add_argument('task',
+                           metavar='--task',
+                           type=str,
+                           help='the task of the model')
+    
+    my_parser.add_argument('label',
+                           metavar='--label',
+                           type=str,
+                           help='the label corresponding to data')
+    my_parser.add_argument('gpu_id',
+                           metavar='--gpu_id',
+                           type=int,
+                           help='GPU id')
+    
+    
+    
+    args = my_parser.parse_args()
+    
+    params['task_name']=args.task
+    params['label_positive']=args.label
+    
     run=None
     if(params['logging']=='neptune'):
         run = neptune.init(project=project_name,api_token=api_token)
         run["parameters"] = params
     else:
         pass
-    train_caller(params,run)
+    train_caller(params,run,args.gpu_id)
     if(run is not None):
         run.stop()
     
