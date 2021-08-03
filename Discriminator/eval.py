@@ -90,7 +90,7 @@ def evaluate_gedi(test_dataloader, params,model,tokenizer,device):
             
             
             
-            loss_mask = b_input_mask[:,:-1].to(torch.float32).cuda()
+            loss_mask = b_input_mask[:,:-1].to(torch.float32).to(device)
             left_ = torch.ones(loss_mask.shape[0],1).type_as(loss_mask)
             loss_mask = torch.cat((left_, loss_mask[:,:-1]), dim=1).to(device)
             loss_lengths = torch.sum(loss_mask,1,keepdim=True)
