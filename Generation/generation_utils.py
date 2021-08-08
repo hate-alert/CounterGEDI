@@ -39,7 +39,7 @@ from transformers.utils import logging
 import math
 
 logger = logging.get_logger(__name__)
-debug=True
+debug=False
 
 @dataclass
 class GreedySearchDecoderOnlyOutput(ModelOutput):
@@ -809,7 +809,6 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
-        print("inside own function")
         # set init values
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
@@ -917,7 +916,14 @@ class GenerationMixin:
                 controller_alphas=controller_alphas,
                 controller_list=controller_list,
                 control_type=control_type,
-                logits_processor=logits_processor,
+                positive_class=positive_class,
+                negative_class=negative_class,
+                class_bias=class_bias,
+                disc_weight=disc_weight,
+                unpertubed_count=unpertubed_count,
+                filter_p=filter_p,
+                target_p=target_p,
+                tokenizer=tokenizer,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -1080,6 +1086,14 @@ class GenerationMixin:
         controller_alphas=None,
         controller_list=None,
         control_type='dexpert',
+        positive_class='true',
+        negative_class='false',
+        unpertubed_count=3,
+        class_bias=0,
+        disc_weight=20,
+        filter_p=0.1,
+        target_p=0.1,
+        tokenizer=None,
         logits_processor: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
@@ -1204,12 +1218,42 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
             
-            if(count>3):
-                if(control_type=='dexpert' and len(controller_list)>0):
-                    next_token_logits=self.adjust_tokens_dexpert(outputs_temp,next_token_logits,controller_list,controller_alpha)
-                    
+            if(debug==True):
+                print("==============================")
+                max_before_control=torch.argmax(next_token_logits, dim=-1).tolist()
+                print("token: ",tokenizer.convert_ids_to_tokens(max_before_control)," token id: ",max_before_control)
             
-            print(next_token_logits.shape)
+            if(count>unpertubed_count):
+                if(control_type=='dexpert' and len(controller_list)>0):
+                    next_token_logits=self.adjust_tokens_dexpert(outputs_temp,next_token_logits,\
+                                                              controller_list,controller_alphas,model_kwargs,\
+                                                              output_hidden_states,output_attentions)
+                    
+                if(control_type=='gedi' and len(controller_list)>0):
+                    if(flag_setup==0):
+                        batch_size,merged_sequence=self.setup_gedi(outputs_temp,positive_class,negative_class,tokenizer)
+                        #print(merged_sequence.shape)
+                        gedi_pad_lens=None
+                        flag_setup=1
+                        logp_desired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
+                        logp_undesired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
+                        logits_r = torch.zeros(outputs_temp.shape[0]*2).to(outputs_temp.device)
+                    next_token_logits,gedi_outputs,logits_r,logp_desired,logp_undesired,\
+                    logp_desired_t,logp_undesired_t,gedi_logits=\
+                                   self.adjust_tokens_gedi(batch_size,merged_sequence,\
+                                   next_token_logits,outputs_temp,\
+                                   controller_list[0],gedi_past,class_bias,\
+                                   disc_weight,filter_p,target_p,gedi_count,
+                                   logits_r,logp_desired,logp_undesired)
+                    
+                    if not (controller_list[0] is None):
+                        gedi_past = gedi_outputs.past_key_values
+            
+            if(debug==True):
+                max_after_control=torch.argmax(next_token_logits, dim=-1).tolist()
+                print("token: ",tokenizer.convert_ids_to_tokens(max_after_control)," token id: ",max_after_control)
+                print("==============================")
+            
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
@@ -1308,7 +1352,6 @@ class GenerationMixin:
         seq_b = (torch.ones(input_ids.shape[0])*nt_id).type_as(input_ids).view(-1,1)
         seq_a = torch.cat((seq_a, input_ids), dim=1)[:,:]
         seq_b = torch.cat((seq_b, input_ids), dim=1)[:,:]
-        print(seq_a)
         bsz = seq_a.shape[0]
         seq_batched = torch.cat((seq_a,seq_b),dim=0)
         return bsz,seq_batched 
@@ -1356,15 +1399,7 @@ class GenerationMixin:
                 logp_undesired = torch.log_softmax(logits0,-1)[:,1]
             
         gedi_logits= (torch.log_softmax(gedi_outputs[0][:, -1, :],-1)+logits_r.unsqueeze(1))
-        
-        print(gedi_logits.shape)
-
-        
         logits_pos,logits_neg = torch.split(gedi_logits/count,inputs.shape[0])
-        
-        print(logits_pos.shape)
-        
-        
         logits = torch.stack((logits_pos,logits_neg),2)
         if "logit_scale" in dir(gedi_model):
             logits = gedi_model.logit_scale*logits
@@ -1564,8 +1599,8 @@ class GenerationMixin:
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            if(count==0):
-                print(model_inputs['input_ids'].shape)
+#             if(count==0):
+#                 print(model_inputs['input_ids'].shape)
             
 
             # forward pass to get next token
@@ -1597,7 +1632,6 @@ class GenerationMixin:
                 if(control_type=='gedi' and len(controller_list)>0):
                     if(flag_setup==0):
                         batch_size,merged_sequence=self.setup_gedi(outputs_temp,positive_class,negative_class,tokenizer)
-                        print(merged_sequence.shape)
                         gedi_pad_lens=None
                         flag_setup=1
                         logp_desired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)

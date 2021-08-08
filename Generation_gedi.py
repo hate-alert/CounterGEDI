@@ -13,6 +13,7 @@ import itertools
 from Generation.eval import *
 from Generation.utils import *
 from Generation.models import *
+import argparse
 
 debug=False
 # from transformers import (
@@ -30,51 +31,23 @@ debug=False
 
 from transformers import AutoTokenizer,AutoModelForCausalLM
 
-params = {
-    'sep_token':'<|endoftext|>',
-    'max_generation_length': 200,
-    'min_generation_length':40,
-    'max_input_length':128,
-    'num_beams':1,
-    'no_repeat_ngram_size':5,
-    'repitition_penalty': 3.5,
-    'control_type':'gedi',
-    'k':100,
-    'p':0.92,
-    'filter_p':0.8,
-    'target_p':0.8,
-    'disc_weight':30,
-    'class_bias':0,
-    'sample':True,
-    'temperature':1.2,
-    'early_stopping':True,
-    'model_path':'gpt2-medium',
-    'dataset_hate':'CONAN',
-    'task_name':[('Emotion','joy')],
-    'coefficient':[4.5],
-    'save_path': './../HULK_new/Counterspeech/Results/',
-    'device': 'cuda',
-    'batch_size':4,
-    'cache_path':'./../HULK_new/Saved_models/',
-    'generation_method':'huggingface',
-    'class_bias':0,
-}
 
 
 
 #task_name  is a list having element in the format (task_name,class_name)
-def get_gpu():
+def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 1.0, maxMemory = 0.8, includeNan=False, excludeID=[], excludeUUID=[])
-        if len(tempID) > 0:
-            print("Found a gpu")
-            print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
-            deviceID=tempID
-            return deviceID
-        else:
-            time.sleep(5)
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 2, maxLoad = 1.0, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
+        for i in range(len(tempID)):
+            if len(tempID) > 0 and (tempID[i]==gpu_id):
+                print("Found a gpu")
+                print('We will use the GPU:',tempID[i],torch.cuda.get_device_name(tempID[i]))
+                deviceID=[tempID[i]]
+                return deviceID
+            else:
+                time.sleep(5)
 
 
 
@@ -188,40 +161,44 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
         alpha_controller.append(alpha)
     print(alpha_controller)
     for step in tqdm(range(len(hate_sentences))):
-        # encode the new user input, add the eos_token and return a tensor in Pytorch
-        input_ids = tokenizer.encode(hate_sentences[step],truncation=True,max_length=params['max_input_length'],return_tensors='pt') 
-        eos = tokenizer.encode(params['sep_token'],return_tensors='pt')
-        input_ids = torch.cat((input_ids,eos),1)
-        input_ids=input_ids.to(device)
-        ####### greedy_Decoding ######
-        beam_outputs = model.generate(
-            controller_alphas=alpha_controller,
-            controller_list=controller_list,
-            control_type=control_type,
-            positive_class='true',
-            negative_class='false',
-            tokenizer=tokenizer,
-            class_bias=params['class_bias'],
-            filter_p=params['filter_p'],
-            target_p=params['target_p'],
-            disc_weight=params['disc_weight'],
-            input_ids=input_ids, 
-            pad_token_id         = tokenizer.eos_token_id,
-            max_length           = params['max_generation_length']+len(input_ids[0]),
-            min_length           = params['min_generation_length']+len(input_ids[0]),
-            top_k                = params["k"],
-            top_p                = params["p"],
-            repetition_penalty   = params["repitition_penalty"],
-            temperature          = params["temperature"],
-            num_beams            = params['num_beams'], 
-            do_sample            = params['sample'],
-            no_repeat_ngram_size = params['no_repeat_ngram_size'],  
-            early_stopping       = params['early_stopping']
-        )
-        reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
-        print("hate",hate_sentences[step])
-        print("counter",reply)
-        cntr.append(reply)
+        cntr_temp=[]
+        for i in range(10):
+            # encode the new user input, add the eos_token and return a tensor in Pytorch
+            input_ids = tokenizer.encode(hate_sentences[step],truncation=True,max_length=params['max_input_length'],return_tensors='pt') 
+            eos = tokenizer.encode(params['sep_token'],return_tensors='pt')
+            input_ids = torch.cat((input_ids,eos),1)
+            input_ids=input_ids.to(device)
+            ####### greedy_Decoding ######
+            beam_outputs = model.generate(
+                controller_alphas=alpha_controller,
+                controller_list=controller_list,
+                control_type=control_type,
+                positive_class='false',
+                negative_class='true',
+                unpertubed_count=params['unpertubed_count'],
+                tokenizer=tokenizer,
+                class_bias=params['class_bias'],
+                filter_p=params['filter_p'],
+                target_p=params['target_p'],
+                disc_weight=params['disc_weight'],
+                input_ids=input_ids, 
+                pad_token_id         = tokenizer.eos_token_id,
+                max_length           = params['max_generation_length']+len(input_ids[0]),
+                min_length           = params['min_generation_length']+len(input_ids[0]),
+                top_k                = params["k"],
+                top_p                = params["p"],
+                repetition_penalty   = params["repitition_penalty"],
+                temperature          = params["temperature"],
+                num_beams            = params['num_beams'], 
+                do_sample            = params['sample'],
+                no_repeat_ngram_size = params['no_repeat_ngram_size'],  
+                early_stopping       = params['early_stopping']
+            )
+            reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
+            cntr_temp.append(reply)
+#         print("hate",hate_sentences[step])
+#         print("counter",reply)
+        cntr.append(cntr_temp)
         if step>0 and step%100==0:
             print("doing")
     return cntr
@@ -231,65 +208,68 @@ def generate_single_own(params,hate_sentences,model,controller_list,tokenizer,de
     
     cntr=[]
     for step in tqdm(range(len(hate_sentences))):
-        # encode the new user input, add the eos_token and return a tensor in Pytorch
-        input_ids = tokenizer.encode(hate_sentences[step],truncation=True,max_length=params['max_input_length'],return_tensors='pt') 
-        eos = tokenizer.encode(params['sep_token'],return_tensors='pt')
-        input_ids = torch.cat((input_ids,eos),1)
-        input_ids=input_ids.to(device)
-        with torch.no_grad():
-            for step in range(params['max_generation_length']):
-                outputs = model(input_ids)
-                ensemble_logits=outputs.logits
-                
-                if params['filter_p'] < 1.0:
-                    ensemble_logits = top_k_top_p_filtering(ensemble_logits, top_p=params['filter_p'])
-                if(debug==True):
-                    print("before controller")
-                    print(ensemble_logits[:,-1,:])
-                    print(torch.max(ensemble_logits[:,-1,:], dim=-1))
+        cntr_temp=[]
+        for i in range(10):
+            # encode the new user input, add the eos_token and return a tensor in Pytorch
+            input_ids = tokenizer.encode(hate_sentences[step],truncation=True,max_length=params['max_input_length'],return_tensors='pt') 
+            eos = tokenizer.encode(params['sep_token'],return_tensors='pt')
+            input_ids = torch.cat((input_ids,eos),1)
+            input_ids=input_ids.to(device)
+            with torch.no_grad():
+                for step in range(params['max_generation_length']):
+                    outputs = model(input_ids)
+                    ensemble_logits=outputs.logits
 
-                if(len(controller_list)>0 and use_control):
-                    controller_logits=[]
-                    for model_temp in controller_list:
-                        temp_outputs = model(input_ids)
-                        logits_temp=temp_outputs.logits
-                        #print(logits_temp)
-                        controller_logits.append(logits_temp)
-                    for i in range(len(controller_list)):
-                        alpha = torch.tensor(params['coefficient'][i]).to(device)
-                        ensemble_logits += alpha * (controller_logits[i])
-                if(debug==True):
-                    print("after controller")
-                    print(ensemble_logits[:,-1,:])
-                    print(torch.max(ensemble_logits[:,-1,:], dim=-1))
+                    if params['filter_p'] < 1.0:
+                        ensemble_logits = top_k_top_p_filtering(ensemble_logits, top_p=params['filter_p'])
+                    if(debug==True):
+                        print("before controller")
+                        print(ensemble_logits[:,-1,:])
+                        print(torch.max(ensemble_logits[:,-1,:], dim=-1))
 
-                next_token_logits = ensemble_logits[:, -1, :]
+                    if(len(controller_list)>0 and use_control):
+                        controller_logits=[]
+                        for model_temp in controller_list:
+                            temp_outputs = model(input_ids)
+                            logits_temp=temp_outputs.logits
+                            #print(logits_temp)
+                            controller_logits.append(logits_temp)
+                        for i in range(len(controller_list)):
+                            alpha = torch.tensor(params['coefficient'][i]).to(device)
+                            ensemble_logits += alpha * (controller_logits[i])
+                    if(debug==True):
+                        print("after controller")
+                        print(ensemble_logits[:,-1,:])
+                        print(torch.max(ensemble_logits[:,-1,:], dim=-1))
 
-                if params['sample']==True:
-                    # Temperature (higher temperature => more likely to sample low probability tokens)
-                    if params['temperature'] != 1.0:
-                        next_token_logits = next_token_logits /  params['temperature']
-                    
-                    # Top-p/top-k filtering
-                    next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=params['k'], top_p=params['p'])
-                    # Sample
-                    probs = F.softmax(next_token_logits, dim=-1)
-                    next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-                else:
-                    # Greedy decoding
-                    next_tokens = torch.argmax(next_token_logits, dim=-1)
+                    next_token_logits = ensemble_logits[:, -1, :]
 
-                
-                # this updates which sentences have not seen an EOS token so far
-                # if one EOS token was seen the sentence is finished
-                
-                if next_tokens == tokenizer.eos_token_id:
-                    break
-                # Update input_ids, attention_mask and position_ids
-                input_ids = torch.cat([input_ids, next_tokens.unsqueeze(-1)], dim=-1)
-                
-            reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]   
-            cntr.append(reply)
+                    if params['sample']==True:
+                        # Temperature (higher temperature => more likely to sample low probability tokens)
+                        if params['temperature'] != 1.0:
+                            next_token_logits = next_token_logits /  params['temperature']
+
+                        # Top-p/top-k filtering
+                        next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=params['k'], top_p=params['p'])
+                        # Sample
+                        probs = F.softmax(next_token_logits, dim=-1)
+                        next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+                    else:
+                        # Greedy decoding
+                        next_tokens = torch.argmax(next_token_logits, dim=-1)
+
+
+                    # this updates which sentences have not seen an EOS token so far
+                    # if one EOS token was seen the sentence is finished
+
+                    if next_tokens == tokenizer.eos_token_id:
+                        break
+                    # Update input_ids, attention_mask and position_ids
+                    input_ids = torch.cat([input_ids, next_tokens.unsqueeze(-1)], dim=-1)
+
+                reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]   
+                cntr_temp.append(reply)
+            cntr.append(cntr_temp)
     return cntr
 
     
@@ -320,7 +300,7 @@ def hate_refrences(data,test_set):
 
 
 
-def main(params,model_path,dataset):
+def main(params,model_path,dataset,gpu_id):
     path_models   = './../HULK_new/Counterspeech/Saved_Models/Generator'
     path_models_disc   = './../HULK_new/Counterspeech/Saved_Models/Discriminator'
     path_datasets = './../HULK_new/Counterspeech/Datasets'
@@ -331,11 +311,11 @@ def main(params,model_path,dataset):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-#             deviceID = get_gpu()
-            torch.cuda.set_device(0)
+            deviceID =get_gpu(gpu_id)
+#            torch.cuda.set_device(1)
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
-#             torch.cuda.set_device(args.gpuid)
+            torch.cuda.set_device(deviceID[0])
 
     else:
         print('Since you dont want to use GPU, using the CPU instead.')
@@ -399,10 +379,10 @@ def main(params,model_path,dataset):
     elif(params['generation_method']=='own'):
         cntr_replies = generate_single_own(params,hate,model,controller_list,tokenizer,device,use_control=True)
     
-    
+    if(params['control_type']!='none'):
+        for controller in controller_list:
+            del controller
     del model
-    for controller in controller_list:
-        del controller
     torch.cuda.empty_cache()
     
     dict_results={}
@@ -415,7 +395,7 @@ def main(params,model_path,dataset):
             'hatespeech':hate,
             'counterspeech_model':counter,
         }
-        print(temp)
+#         print(temp)
         hate_counter_replies[count]=temp
         count+=1
 
@@ -439,6 +419,8 @@ def main(params,model_path,dataset):
             write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_huggingface_"+ts+".json"
         elif(params['control_type']=='gedi'):
             write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_gedi_huggingface_"+ts+".json"
+        else:
+            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_huggingface_"+ts+".json"
     elif(params['generation_method']=='own'):
         write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_"+ts+".json"
 
@@ -446,25 +428,53 @@ def main(params,model_path,dataset):
          json.dump(dict_results, outfile,indent=4)
     
     
-                         
+params = {
+    'sep_token':'<|endoftext|>',
+    'max_generation_length': 100,
+    'min_generation_length':40,
+    'max_input_length':128,
+    'num_beams':1,
+    'unpertubed_count':10,
+    'no_repeat_ngram_size':5,
+    'repitition_penalty': 3.5,
+    'control_type':'gedi',
+    'k':100,
+    'p':0.92,
+    'filter_p':0.8,
+    'target_p':0.8,
+    'disc_weight':30,
+    'class_bias':0,
+    'sample':True,
+    'temperature':1.2,
+    'early_stopping':True,
+    'model_path':'gpt2-medium',
+    'dataset_hate':'CONAN',
+    'task_name':[('Emotion','joy')],
+    'coefficient':[4.5],
+    'save_path': './../HULK_new/Counterspeech/Results/',
+    'device': 'cuda',
+    'batch_size':4,
+    'cache_path':'./../HULK_new/Saved_models/',
+    'generation_method':'huggingface',
+    'gpu_id':1
+}
+                       
     
 if __name__ == "__main__":
     
     saved_path='../HULK_new/Counterspeech/Saved_Models/Generator/'
-    
-    
-    #model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',
-    #saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
-    #model_paths=[saved_path+'CONAN_DialoGPT-medium']
-    model_paths=['microsoft/DialoGPT-medium']
-    datasets = ["CONAN","Reddit","Gab"]
-    
-    total = [model_paths, datasets]
-    for element in itertools.product(*total):
+    model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',saved_path+'CONAN_DialoGPT-medium']
+#     saved_path+'Create_debate_DialoGPT-medium'    
+#     model_paths=[saved_path+'CONAN_DialoGPT-medium']
+#     model_paths=['microsoft/DialoGPT-medium']
+    datasets = ["Reddit","Gab","CONAN"]
+#     total = [model_paths, datasets]
+#     for element in itertools.product(*total):
+    for element in zip(model_paths,datasets):
         model=element[0]
         dataset=element[1]
         print(model,dataset)
-        main(params,model,dataset)
+        main(params,model,dataset,params['gpu_id'])
     
     
     

@@ -159,10 +159,6 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
                 run["train/batch_loss"].log(loss.item())
             
             
-            
-            
-            
-            
             loss.backward()
             
             if (step + 1) % params['gradient_accumulation_steps'] == 0:
