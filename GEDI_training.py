@@ -27,7 +27,7 @@ def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 0.9, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 1.0, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
         print(tempID)
         if len(tempID) > 0 and (tempID[0]==gpu_id):
             print("Found a gpu")
@@ -158,10 +158,6 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
                 run["train/batch_loss"].log(loss.item())
             
             
-            
-            
-            
-            
             loss.backward()
             
             if (step + 1) % params['gradient_accumulation_steps'] == 0:
@@ -173,7 +169,7 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
                 global_step += 1
 
             
-#            if((global_step+1)%params['save_step']==0):
+#        if((global_step+1)%params['save_step']==0):
 #                 print("running training")
 #                 macro_f1_train,accuracy_train, pre_train, rec_train,overall_gen_loss_train = evaluate_gedi(training_dataloader, params,model,tokenizer,device)
 
