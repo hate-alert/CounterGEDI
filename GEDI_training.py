@@ -19,7 +19,7 @@ import argparse
 import json
 import time
 
-HULK_path='../HULK_new/'
+HULK_path='../HULK/'
 
 
 
@@ -62,7 +62,7 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
     best_accuracy_val = 0
     best_pre_val = 0
     best_rec_val = 0
-    
+    best_gen_val_loss=0
     best_model = None
     # current_epoch, best_weighted_f1 = load_metrics(filepath, model, optimizer
     pt_id = tokenizer.encode('true')[0]
@@ -71,9 +71,8 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
     print(pt_id,nt_id)
     
     criterion = nn.CrossEntropyLoss()
-
+    model.train()
     for epoch_i in tqdm(range(0, epochs)):
-        model.train()
         for step, batch in tqdm(enumerate(training_dataloader), total=len(training_dataloader)):
             b_input_ids=batch[0].to(device).long() 
             b_input_mask=batch[1].to(device)
@@ -174,34 +173,34 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
                 global_step += 1
 
             
-            if(global_step%params['save_step']==0):
+#            if((global_step+1)%params['save_step']==0):
 #                 print("running training")
 #                 macro_f1_train,accuracy_train, pre_train, rec_train,overall_gen_loss_train = evaluate_gedi(training_dataloader, params,model,tokenizer,device)
 
-                print("running validation")
-                macro_f1_val,accuracy_val, pre_val, rec_val,overall_gen_loss_val = evaluate_gedi(validation_dataloader, params,model,tokenizer,device)
-                
-            
-                if(params['logging']=='neptune'):
-                    #### val scores updated
-                    run["label/val/f1"].log(macro_f1_val)
-                    run["label/val/accuracy"].log(accuracy_val)
-                    run["label/val/positive_class_precision"].log(pre_val)
-                    run["label/val/positive_class_recall"].log(rec_val)
-                    run["label/val/gen_loss"].log(overall_gen_loss_val)
-                else:
-                    #print("Train Macro F1: {0:.3f}".format(macro_f1_train))
-                    print("Val Macro F1: {0:.3f}".format(macro_f1_val))
-                    print("Val Gen loss: {0:.3f}".format(overall_gen_loss_val))
-                
-                if macro_f1_val > best_macro_f1_val or best_gen_val_loss > overall_gen_loss_val:
-                    best_macro_f1_val = macro_f1_val
-                    best_accuracy_val = accuracy_val
-                    best_pre_val = pre_val
-                    best_rec_val = rec_val
-                    best_gen_val_loss=best_gen_val_loss
-                    save_generation_gedi(model,tokenizer,params)
-            
+        print("running validation")
+        macro_f1_val,accuracy_val, pre_val, rec_val,overall_gen_loss_val = evaluate_gedi(validation_dataloader, params,model,tokenizer,device)
+
+
+        if(params['logging']=='neptune'):
+            #### val scores updated
+            run["label/val/f1"].log(macro_f1_val)
+            run["label/val/accuracy"].log(accuracy_val)
+            run["label/val/positive_class_precision"].log(pre_val)
+            run["label/val/positive_class_recall"].log(rec_val)
+            run["label/val/gen_loss"].log(overall_gen_loss_val)
+        else:
+            #print("Train Macro F1: {0:.3f}".format(macro_f1_train))
+            print("Val Macro F1: {0:.3f}".format(macro_f1_val))
+            print("Val Gen loss: {0:.3f}".format(overall_gen_loss_val))
+
+        if (macro_f1_val > best_macro_f1_val) or (best_gen_val_loss > overall_gen_loss_val):
+            best_macro_f1_val = macro_f1_val
+            best_accuracy_val = accuracy_val
+            best_pre_val = pre_val
+            best_rec_val = rec_val
+            best_gen_val_loss=overall_gen_loss_val
+            save_generation_gedi(model,tokenizer,params)
+
                     
 
 #         print("running test")
@@ -294,7 +293,7 @@ params={
  'model_path':'gpt2',
  'task_name':'Toxicity',
  'save_path':HULK_path+'Counterspeech/Saved_models/Discriminator/',
- 'logging':'neptune
+ 'logging':'neptune',
  'cache_path':HULK_path+'Saved_models/',
  'label_positive':'toxic',
  'batch_size':8,
@@ -306,7 +305,7 @@ params={
  'learning_rate':2e-5,
  'bias_own':2,
  'logit_scale':True,
- 'gradient_accumulation_steps':16,
+ 'gradient_accumulation_steps':1,
  'gen_weight':0.8,
  'max_grad_norm':1,   
  'save_step':1000
