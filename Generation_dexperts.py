@@ -13,6 +13,7 @@ import itertools
 from Generation.eval import *
 from Generation.utils import *
 from Generation.models import *
+import argparse
 
 debug=False
 # from transformers import (
@@ -30,45 +31,17 @@ debug=False
 
 from transformers import AutoTokenizer,AutoModelForCausalLM
 
-params = {
-    'sep_token':'<|endoftext|>',
-    'max_generation_length': 200,
-    'min_generation_length':40,
-    'max_input_length':128,
-    'num_beams':1,
-    'no_repeat_ngram_size':5,
-    'repitition_penalty': 3.5,
-    'control_type':'gedi',
-    'k':100,
-    'p':0.92,
-    'filter_p':0.8,
-    'target_p':0.8,
-    'disc_weight':30,
-    'class_bias':0,
-    'sample':True,
-    'temperature':1.2,
-    'early_stopping':True,
-    'model_path':'gpt2-medium',
-    'dataset_hate':'CONAN',
-    'task_name':[('Emotion','joy')],
-    'coefficient':[4.5],
-    'save_path': './../HULK_new/Counterspeech/Results/',
-    'device': 'cuda',
-    'batch_size':4,
-    'cache_path':'./../HULK_new/Saved_models/',
-    'generation_method':'huggingface',
-    'class_bias':0,
-}
 
 
 
 #task_name  is a list having element in the format (task_name,class_name)
-def get_gpu():
+def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 1.0, maxMemory = 0.8, includeNan=False, excludeID=[], excludeUUID=[])
-        if len(tempID) > 0:
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 1.0, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
+        print(tempID)
+        if len(tempID) > 0 and (tempID[0]==gpu_id):
             print("Found a gpu")
             print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
             deviceID=tempID
@@ -198,8 +171,9 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             controller_alphas=alpha_controller,
             controller_list=controller_list,
             control_type=control_type,
-            positive_class='true',
-            negative_class='false',
+            positive_class='false',
+            negative_class='true',
+            unpertubed_count=params['unpertubed_count'],
             tokenizer=tokenizer,
             class_bias=params['class_bias'],
             filter_p=params['filter_p'],
@@ -219,8 +193,8 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             early_stopping       = params['early_stopping']
         )
         reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
-        print("hate",hate_sentences[step])
-        print("counter",reply)
+#         print("hate",hate_sentences[step])
+#         print("counter",reply)
         cntr.append(reply)
         if step>0 and step%100==0:
             print("doing")
@@ -320,7 +294,7 @@ def hate_refrences(data,test_set):
 
 
 
-def main(params,model_path,dataset):
+def main(params,model_path,dataset,gpu_id):
     path_models   = './../HULK_new/Counterspeech/Saved_Models/Generator'
     path_models_disc   = './../HULK_new/Counterspeech/Saved_Models/Discriminator'
     path_datasets = './../HULK_new/Counterspeech/Datasets'
@@ -331,8 +305,8 @@ def main(params,model_path,dataset):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-#             deviceID = get_gpu()
-            torch.cuda.set_device(0)
+            deviceID =get_gpu(gpu_id)
+#            torch.cuda.set_device(1)
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
 #             torch.cuda.set_device(args.gpuid)
@@ -415,7 +389,7 @@ def main(params,model_path,dataset):
             'hatespeech':hate,
             'counterspeech_model':counter,
         }
-        print(temp)
+#         print(temp)
         hate_counter_replies[count]=temp
         count+=1
 
@@ -446,17 +420,124 @@ def main(params,model_path,dataset):
          json.dump(dict_results, outfile,indent=4)
     
     
-                         
+params = {
+    'sep_token':'<|endoftext|>',
+    'max_generation_length': 200,
+    'min_generation_length':40,
+    'max_input_length':128,
+    'num_beams':1,
+    'unpertubed_count':0,
+    'no_repeat_ngram_size':5,
+    'repitition_penalty': 3.5,
+    'control_type':'gedi',
+    'k':100,
+    'p':0.92,
+    'filter_p':0.8,
+    'target_p':0.8,
+    'disc_weight':30,
+    'class_bias':0,
+    'sample':True,
+    'temperature':1.2,
+    'early_stopping':True,
+    'model_path':'gpt2-medium',
+    'dataset_hate':'CONAN',
+    'task_name':[('Emotion','joy')],
+    'coefficient':[4.5],
+    'save_path': './../HULK_new/Counterspeech/Results/',
+    'device': 'cuda',
+    'batch_size':4,
+    'cache_path':'./../HULK_new/Saved_models/',
+    'generation_method':'huggingface',
+    'class_bias':0,
+}
+                       
     
 if __name__ == "__main__":
     
     saved_path='../HULK_new/Counterspeech/Saved_Models/Generator/'
     
     
-    #model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',
-    #saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
-    #model_paths=[saved_path+'CONAN_DialoGPT-medium']
-    model_paths=['microsoft/DialoGPT-medium']
+    my_parser = argparse.ArgumentParser()
+    my_parser.add_argument('max_generation_length',
+                           metavar='--max_generation_length',
+                           type=str,
+                           help='the maximum generation length')
+    
+    my_parser.add_argument('min_generation_length',
+                           metavar='--min_generation_length',
+                           type=str,
+                           help='the minimum generation length')
+    
+    my_parser.add_argument('unpertubed_count',
+                           metavar='--unpertubed_count',
+                           type=str,
+                           help='How many input to be unpertubed in the output')
+    
+    my_parser.add_argument('no_repeat_ngram_size',
+                           metavar='--no_repeat_ngram_size',
+                           type=str,
+                           help='If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.')
+    
+    my_parser.add_argument('repitition_penalty',
+                           metavar='--repitition_penalty',
+                           type=str,
+                           help='The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.')
+    my_parser.add_argument('k',
+                           metavar='--k',
+                           type=str,
+                           help='The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.')
+    my_parser.add_argument('p',
+                           metavar='--p',
+                           type=str,
+                           help='The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.')
+    my_parser.add_argument('filter_p',
+                           metavar='--filter_p',
+                           type=str,
+                           help='filters at up to filter_p cumulative probability from next token distribution.')
+    my_parser.add_argument('target_p',
+                           metavar='--target_p',
+                           type=str,
+                           help='    In comination with filter_p, saves tokens with above target p probability of being in the correct class')
+    my_parser.add_argument('disc_weight',
+                           metavar='--disc_weight',
+                           type=str,
+                           help='weight for GeDi discriminator')
+    
+    my_parser.add_argument('class_bias',
+                           metavar='--class_bias',
+                           type=str,
+                           help='biases GeDi classification probabilties')
+    
+    my_parser.add_argument('sample',
+                           metavar='--sample',
+                           type=str,
+                           help='if sampling done')
+    
+    
+    my_parser.add_argument('temperature',
+                           metavar='--temperature',
+                           type=str,
+                           help='lower tend toward greedy sampling') 
+    
+    my_parser.add_argument('gpu_id',
+                           metavar='--gpu_id',
+                           type=int,
+                           help='GPU id')
+    
+    
+    
+    args = my_parser.parse_args()
+    
+    for param in params.keys():
+        try:
+            params[params]=args.param
+        except KeyError:
+            pass
+    
+    
+    model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',saved_path+'CONAN_DialoGPT-medium' , saved_path+'Create_debate_DialoGPT-medium']
+#     model_paths=[saved_path+'CONAN_DialoGPT-medium']
+#     model_paths=['microsoft/DialoGPT-medium']
     datasets = ["CONAN","Reddit","Gab"]
     
     total = [model_paths, datasets]
@@ -464,7 +545,7 @@ if __name__ == "__main__":
         model=element[0]
         dataset=element[1]
         print(model,dataset)
-        main(params,model,dataset)
+        main(params,model,dataset,gpu_id)
     
     
     
