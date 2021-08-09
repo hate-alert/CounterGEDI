@@ -3,6 +3,6 @@
 # python GEDI_training.py Emotion fear 1
 # python GEDI_training.py Emotion surprise  1
 # python GEDI_training.py Emotion anger  1
-python GEDI_training.py Emotion sadness  1
+python GEDI_training.py Emotion sadness  0
 # python GEDI_training.py Toxicity toxic  1 
 # python GEDI_training.py Emotion joy 1
