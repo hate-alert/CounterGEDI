@@ -30,8 +30,10 @@ debug=False
 # )
 
 from transformers import AutoTokenizer,AutoModelForCausalLM
+HULK_path='../HULK/'
 
 
+print(HULK_path)
 
 
 #task_name  is a list having element in the format (task_name,class_name)
@@ -196,8 +198,8 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             )
             reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
             cntr_temp.append(reply)
-#         print("hate",hate_sentences[step])
-#         print("counter",reply)
+#             print("hate",hate_sentences[step])
+#             print("counter",reply)
         cntr.append(cntr_temp)
         if step>0 and step%100==0:
             print("doing")
@@ -267,7 +269,8 @@ def generate_single_own(params,hate_sentences,model,controller_list,tokenizer,de
                     # Update input_ids, attention_mask and position_ids
                     input_ids = torch.cat([input_ids, next_tokens.unsqueeze(-1)], dim=-1)
 
-                reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]   
+                reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]  
+                print(reply)
                 cntr_temp.append(reply)
             cntr.append(cntr_temp)
     return cntr
@@ -301,9 +304,10 @@ def hate_refrences(data,test_set):
 
 
 def main(params,model_path,dataset,gpu_id):
-    path_models   = './../HULK_new/Counterspeech/Saved_Models/Generator'
-    path_models_disc   = './../HULK_new/Counterspeech/Saved_Models/Discriminator'
-    path_datasets = './../HULK_new/Counterspeech/Datasets'
+    print(HULK_path)
+    path_models   = HULK_path+'Counterspeech/Saved_Models/Generator'
+    path_models_disc   = HULK_path+'Counterspeech/Saved_Models/Discriminator'
+    path_datasets = HULK_path+'/Counterspeech/Datasets'
 
     
     if torch.cuda.is_available() and params['device']=='cuda':    
@@ -344,6 +348,7 @@ def main(params,model_path,dataset,gpu_id):
             print("loaded_gedi")
             task =params['task_name'][0]
             path_model_task=path_models_disc+'/'+task[0]+'_gedi_gpt2_'+task[1]+'/'
+            print(path_model_task)
             model_temp=Model_Generation.from_pretrained(path_model_task,cache_dir=cache_path)
             model_temp.to(device)
             model_temp.eval()
@@ -449,12 +454,12 @@ params = {
     'early_stopping':True,
     'model_path':'gpt2-medium',
     'dataset_hate':'CONAN',
-    'task_name':[('Emotion','joy')],
+    'task_name':[('Emotion','anger')],
     'coefficient':[4.5],
-    'save_path': './../HULK_new/Counterspeech/Results/',
+    'save_path': HULK_path+'Counterspeech/Results/',
     'device': 'cuda',
     'batch_size':4,
-    'cache_path':'./../HULK_new/Saved_models/',
+    'cache_path':HULK_path+'Saved_models/',
     'generation_method':'huggingface',
     'gpu_id':1
 }
@@ -462,7 +467,7 @@ params = {
     
 if __name__ == "__main__":
     
-    saved_path='../HULK_new/Counterspeech/Saved_Models/Generator/'
+    saved_path=HULK_path+'Counterspeech/Saved_Models/Generator/'
     model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',saved_path+'CONAN_DialoGPT-medium']
 #     saved_path+'Create_debate_DialoGPT-medium'    
 #     model_paths=[saved_path+'CONAN_DialoGPT-medium']
