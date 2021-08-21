@@ -179,8 +179,8 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
                 controller_alphas=alpha_controller,
                 controller_list=controller_list,
                 control_type=control_type,
-                positive_class=['false', 'false'],
-                negative_class=['true', 'true'],
+                positive_class=['true', 'false'],
+                negative_class=['false', 'true'],
                 unpertubed_count=params['unpertubed_count'],
                 tokenizer=tokenizer,
                 class_bias=params['class_bias'],
@@ -203,13 +203,8 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             )
             reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
             cntr_temp.append(reply)
-<<<<<<< HEAD
         print("hate",hate_sentences[step])
         print("counter",cntr_temp[0])
-=======
-#             print("hate",hate_sentences[step])
-#             print("counter",reply)
->>>>>>> df971a6c8663c05ff4e064bca9b021f46a6d7df1
         cntr.append(cntr_temp)
         if step>0 and step%100==0:
             print("doing")
@@ -313,11 +308,7 @@ def hate_refrences(data,test_set):
 
 
 
-<<<<<<< HEAD
 def main(params,model_path,dataset,gpu_id,num_samples):
-=======
-def main(params,model_path,dataset,gpu_id):
->>>>>>> df971a6c8663c05ff4e064bca9b021f46a6d7df1
     print(HULK_path)
     path_models   = HULK_path+'Counterspeech/Saved_Models/Generator'
     path_models_disc   = HULK_path+'Counterspeech/Saved_Models/Discriminator'
@@ -469,20 +460,14 @@ params = {
     'early_stopping':True,
     'model_path':'gpt2-medium',
     'dataset_hate':'CONAN',
-<<<<<<< HEAD
-    'task_name':[("Politeness", 'polite')],
+    'task_name':[('Toxicity', 'toxic')],
     'coefficient':[4.5],
     'save_path': HULK_path+'Counterspeech/Results_new/',
-=======
-    'task_name':[('Emotion','anger')],
-    'coefficient':[4.5],
-    'save_path': HULK_path+'Counterspeech/Results/',
->>>>>>> df971a6c8663c05ff4e064bca9b021f46a6d7df1
     'device': 'cuda',
     'batch_size':4,
     'cache_path':HULK_path+'Saved_models/',
     'generation_method':'huggingface',
-    'gpu_id':0
+    'gpu_id':1
 }
                        
     
