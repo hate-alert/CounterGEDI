@@ -8,6 +8,43 @@ from nltk.translate import meteor
 from nltk.translate.bleu_score import SmoothingFunction
 
 
+def hate_refrences(data,test_set):          ###############returns pair of <hate,refrences>  
+    hate  = []
+    reply = []
+    refrences = []
+    for sample in data:
+        ht , rep = sample[0] , sample[1]
+        hate.append(ht)
+        reply.append(rep)
+    hate = list(set(hate))
+    mp={}
+    for ht_i in hate:
+        refs = []
+        for sample in data:
+            ht_j , rep =  sample[0] , sample[1]
+            if ht_j == ht_i:
+                refs.append(rep)
+        mp[ht_i] = refs
+        refrences.append(refs)
+    hate = list(set([x[0] for x in test_set]))
+    refs = [mp[ht_i] for ht_i in hate]
+    return hate,refs             # a given hate instance and refrences(replies) for metrics evaluation
+
+
+# In[7]:
+
+
+def training_corpus(train_set):    # returns training corpus
+    replies = []
+    for sample in train_set:
+        rep = sample[1]
+        replies.append(rep)
+    replies = list(set(replies))
+    return replies                # returns the sentences used while training 
+
+
+
+
 def evaluate(params, model, test_dataloader, device):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_loss = 0.0
