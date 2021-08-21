@@ -1,8 +1,6 @@
 # Byte-compiled / optimized / DLL files
-<<<<<<< HEAD
 data/
-=======
->>>>>>> d2a4fb59d97bb4fef91c9a4b641d10c0279c49b3
+
 .neptune/
 apiconfig.py
 __pycache__/
@@ -133,3 +131,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+Emotions-pytorch/

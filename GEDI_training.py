@@ -288,11 +288,11 @@ def train_caller(params,run=None,gpu_id=0):
     
 params={
  'model_path':'gpt2',
- 'task_name':'Toxicity',
+ 'task_name':'Emotion',
  'save_path':HULK_path+'Counterspeech/Saved_models/Discriminator/',
  'logging':'neptune',
  'cache_path':HULK_path+'Saved_models/',
- 'label_positive':'toxic',
+ 'label_positive':'love',
  'batch_size':8,
  'max_length':128,
  'dropout':1.0,
