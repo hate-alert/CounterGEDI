@@ -19,7 +19,7 @@ import argparse
 import json
 import time
 
-HULK_path='../HULK_new/'
+HULK_path='../../../HULK_new/'
 
 
 
@@ -28,15 +28,15 @@ def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 1.0, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
-        print(tempID)
-        if len(tempID) > 0 and (tempID[0]==gpu_id):
-            print("Found a gpu")
-            print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
-            deviceID=tempID
-            return deviceID
-        else:
-            time.sleep(5)
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 2, maxLoad = 1.0, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
+        for i in range(len(tempID)):
+            if len(tempID) > 0 and (tempID[i]==gpu_id):
+                print("Found a gpu")
+                print('We will use the GPU:',tempID[i],torch.cuda.get_device_name(tempID[i]))
+                deviceID=[tempID[i]]
+                return deviceID
+            else:
+                time.sleep(5)
 
 
             
@@ -216,7 +216,6 @@ def train(training_dataloader, validation_dataloader, test_dataloader, model, to
 
                 
     if(params['logging']=='neptune'):
-      
         run["label/val/best_f1"].log(best_macro_f1_val)
         run["label/val/best_accuracy"].log(best_accuracy_val)
         run["label/val/best_positive_class_precision"].log(best_pre_val)
@@ -242,8 +241,6 @@ def train_caller(params,run=None,gpu_id=0):
         else:
             print("labels should be one of",class_label)
         print(dict_map)
-        
-        
         ## set discriminator loss
         params['disc_weight']=1-params['gen_weight']
         train_data_source = Normal_Dataset(train_data,class_label,dict_map,tokenizer, params,train = True)
@@ -290,7 +287,7 @@ params={
  'model_path':'gpt2',
  'task_name':'Emotion',
  'save_path':HULK_path+'Counterspeech/Saved_models/Discriminator/',
- 'logging':'neptune',
+ 'logging':'local',
  'cache_path':HULK_path+'Saved_models/',
  'label_positive':'love',
  'batch_size':8,

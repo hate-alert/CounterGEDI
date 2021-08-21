@@ -32,7 +32,6 @@ debug=False
 from transformers import AutoTokenizer,AutoModelForCausalLM
 HULK_path='../HULK_new/'
 
-
 print(HULK_path)
 
 
@@ -204,8 +203,13 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             )
             reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
             cntr_temp.append(reply)
+<<<<<<< HEAD
         print("hate",hate_sentences[step])
         print("counter",cntr_temp[0])
+=======
+#             print("hate",hate_sentences[step])
+#             print("counter",reply)
+>>>>>>> df971a6c8663c05ff4e064bca9b021f46a6d7df1
         cntr.append(cntr_temp)
         if step>0 and step%100==0:
             print("doing")
@@ -275,7 +279,8 @@ def generate_single_own(params,hate_sentences,model,controller_list,tokenizer,de
                     # Update input_ids, attention_mask and position_ids
                     input_ids = torch.cat([input_ids, next_tokens.unsqueeze(-1)], dim=-1)
 
-                reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]   
+                reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]  
+                print(reply)
                 cntr_temp.append(reply)
             cntr.append(cntr_temp)
     return cntr
@@ -308,7 +313,11 @@ def hate_refrences(data,test_set):
 
 
 
+<<<<<<< HEAD
 def main(params,model_path,dataset,gpu_id,num_samples):
+=======
+def main(params,model_path,dataset,gpu_id):
+>>>>>>> df971a6c8663c05ff4e064bca9b021f46a6d7df1
     print(HULK_path)
     path_models   = HULK_path+'Counterspeech/Saved_Models/Generator'
     path_models_disc   = HULK_path+'Counterspeech/Saved_Models/Discriminator'
@@ -353,6 +362,7 @@ def main(params,model_path,dataset,gpu_id,num_samples):
         print("loaded_gedi")
         for task in params['task_name']:
             path_model_task=path_models_disc+'/'+task[0]+'_gedi_gpt2_'+task[1]+'/'
+            print(path_model_task)
             model_temp=Model_Generation.from_pretrained(path_model_task,cache_dir=cache_path)
             model_temp.to(device)
             model_temp.eval()
@@ -459,9 +469,15 @@ params = {
     'early_stopping':True,
     'model_path':'gpt2-medium',
     'dataset_hate':'CONAN',
+<<<<<<< HEAD
     'task_name':[("Politeness", 'polite')],
     'coefficient':[4.5],
     'save_path': HULK_path+'Counterspeech/Results_new/',
+=======
+    'task_name':[('Emotion','anger')],
+    'coefficient':[4.5],
+    'save_path': HULK_path+'Counterspeech/Results/',
+>>>>>>> df971a6c8663c05ff4e064bca9b021f46a6d7df1
     'device': 'cuda',
     'batch_size':4,
     'cache_path':HULK_path+'Saved_models/',
