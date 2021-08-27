@@ -30,7 +30,7 @@ debug=False
 # )
 
 from transformers import AutoTokenizer,AutoModelForCausalLM
-HULK_path='../HULK_new/'
+HULK_path='../HULK/'
 
 print(HULK_path)
 
@@ -179,8 +179,8 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
                 controller_alphas=alpha_controller,
                 controller_list=controller_list,
                 control_type=control_type,
-                positive_class=['true', 'false'],
-                negative_class=['false', 'true'],
+                positive_class=['false', 'false'],
+                negative_class=['true', 'true'],
                 unpertubed_count=params['unpertubed_count'],
                 tokenizer=tokenizer,
                 class_bias=params['class_bias'],
@@ -460,7 +460,7 @@ params = {
     'early_stopping':True,
     'model_path':'gpt2-medium',
     'dataset_hate':'CONAN',
-    'task_name':[('Toxicity', 'toxic')],
+    'task_name':[('Emotion', 'sadness')],
     'coefficient':[4.5],
     'save_path': HULK_path+'Counterspeech/Results_new/',
     'device': 'cuda',
