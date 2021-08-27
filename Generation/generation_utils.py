@@ -1236,9 +1236,9 @@ class GenerationMixin:
                     logp_undesired_t = {}
                     for i, control in enumerate(controller_list):
                         if(flag_setup==0):
-                            batch_size,merged_sequence=self.setup_gedi(outputs_temp,positive_class[i],negative_class[i],tokenizer)
+                            batch_size[i],merged_sequence[i] = self.setup_gedi(outputs_temp,positive_class[i],negative_class[i],tokenizer)
                             gedi_pad_lens=None
-                            flag_setup=1
+                            flag_setup[i]=1
                             logp_desired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
                             logp_undesired = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
                             logits_r[i] = torch.zeros(outputs_temp.shape[0]*2).to(outputs_temp.device)
@@ -1402,10 +1402,11 @@ class GenerationMixin:
 
                 logp_desired = torch.log_softmax(logits0,-1)[:,0]
                 logp_undesired = torch.log_softmax(logits0,-1)[:,1]
-            
+        
         gedi_logits= (torch.log_softmax(gedi_outputs[0][:, -1, :],-1)+logits_r.unsqueeze(1))
         logits_pos,logits_neg = torch.split(gedi_logits/count,inputs.shape[0])
         logits = torch.stack((logits_pos,logits_neg),2)
+        
         if "logit_scale" in dir(gedi_model):
             logits = gedi_model.logit_scale*logits
 
@@ -1417,7 +1418,7 @@ class GenerationMixin:
 
         logp_desired_t = torch.log_softmax(logits,-1)[:,:,0]
         logp_undesired_t = torch.log_softmax(logits,-1)[:,:,1]
-        next_token_logits = torch.log_softmax(1*next_token_logits,-1) + disc_weight*(logp_desired_t) 
+        next_token_logits = torch.log_softmax(1*next_token_logits,-1)+ disc_weight*(logp_desired_t) 
         #next_token_logits = torch.log_softmax(1*next_token_logits,-1) + disc_weight*(logp_desired_t) - disc_weight*(logp_undesired_t) 
 
         sorted_logps, sorted_indices = torch.sort(logp_desired_t, descending=False)
@@ -1602,13 +1603,15 @@ class GenerationMixin:
         desired_labels = torch.zeros(input_ids.shape[0],dtype=torch.long).to(input_ids.device)
         rewards=None
         
-        logits_r = {0:None, 1:None}
-        gedi_logits = {0:None, 1:None}
-        logp_desired_t = {0:None, 1:None}
-        logp_undesired_t = {0:None, 1:None}
-        logp_desired = {0:None, 1:None}
-        logp_undesired = {0:None, 1:None}
-        flag_setup = {0:0, 1:0}
+        logits_r = {0:None, 1:None, 2:None}
+        gedi_logits = {0:None, 1:None, 2:None}
+        logp_desired_t = {0:None, 1:None, 2:None}
+        logp_undesired_t = {0:None, 1:None, 2:None}
+        logp_desired = {0:None, 1:None, 2:None}
+        logp_undesired = {0:None, 1:None, 2:None}
+        flag_setup = {0:0, 1:0, 2:0}
+        batch_size = {0:None, 1:None, 2:None}
+        merged_sequence = {0:None, 1:None, 2:None}
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1625,7 +1628,7 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
             
-            
+            #next_token_logits=torch.log_softmax(1*next_token_logits,-1)
             
             if(debug==True):
                 print("==============================")
@@ -1645,7 +1648,7 @@ class GenerationMixin:
                 if(control_type=='gedi' and len(controller_list)>0):
                     for i, control in enumerate(controller_list):
                         if(flag_setup[i]==0):
-                            batch_size,merged_sequence=self.setup_gedi(outputs_temp,positive_class[i],negative_class[i],tokenizer)
+                            batch_size[i],merged_sequence[i]=self.setup_gedi(outputs_temp,positive_class[i],negative_class[i],tokenizer)
                             gedi_pad_lens=None
                             flag_setup[i]=1
                             logp_desired[i] = (torch.zeros(outputs_temp.shape[0]) + torch.log(torch.tensor(0.5))).to(outputs_temp.device)
@@ -1653,7 +1656,7 @@ class GenerationMixin:
                             logits_r[i] = torch.zeros(outputs_temp.shape[0]*2).to(outputs_temp.device)
                         next_token_logits,gedi_outputs,logits_r[i],logp_desired[i],logp_undesired[i],\
                         logp_desired_t[i],logp_undesired_t[i],gedi_logits[i]=\
-                                       self.adjust_tokens_gedi(batch_size,merged_sequence,\
+                                       self.adjust_tokens_gedi(batch_size[i],merged_sequence[i],\
                                        next_token_logits,outputs_temp,\
                                        controller_list[i],gedi_past[i],class_bias,\
                                        disc_weight[i],filter_p,target_p,gedi_count,
@@ -1712,7 +1715,6 @@ class GenerationMixin:
             else:
                 outputs_temp=torch.cat([outputs_temp, next_tokens[:, None]], dim=-1)
             
-            
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             cur_len = cur_len + 1
             count+=1
@@ -1734,8 +1736,9 @@ class GenerationMixin:
             )
         
         
-        if control_type=='gedi' and len(controller_list)==1:
-            print("GeDi estimates the probability that it sample is desired class is: " + str(torch.exp(logp_desired[0]).item()))
+        if control_type=='gedi':
+            for i in range(len(controller_list)):
+                print("GeDi estimates the probability that it sample is desired class in controller "+str(i+1) + " is: " + str(torch.exp(logp_desired[i][0]).item()))
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:

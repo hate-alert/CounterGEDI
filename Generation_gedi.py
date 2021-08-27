@@ -40,7 +40,7 @@ def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 2, maxLoad = 1.0, maxMemory = 0.5, includeNan=False, excludeID=[], excludeUUID=[])
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 2, maxLoad = 1.0, maxMemory = 0.7, includeNan=False, excludeID=[], excludeUUID=[])
         for i in range(len(tempID)):
             if len(tempID) > 0 and (tempID[i]==gpu_id):
                 print("Found a gpu")
@@ -179,8 +179,8 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
                 controller_alphas=alpha_controller,
                 controller_list=controller_list,
                 control_type=control_type,
-                positive_class=['false', 'false'],
-                negative_class=['true', 'true'],
+                positive_class=['false','false','true'], 
+                negative_class=['true','true','false'], 
                 unpertubed_count=params['unpertubed_count'],
                 tokenizer=tokenizer,
                 class_bias=params['class_bias'],
@@ -427,7 +427,7 @@ def main(params,model_path,dataset,gpu_id,num_samples):
         if(params['control_type']=='dexpert'):
             write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_huggingface_"+ts+".json"
         elif(params['control_type']=='gedi'):
-            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_gedi_huggingface_"+ts+"_single.json"
+            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_gedi_huggingface_"+ts+"_multi.json"
         else:
             write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_huggingface_"+ts+"_base.json"
     elif(params['generation_method']=='own'):
@@ -453,7 +453,7 @@ params = {
     'p':0.92,
     'filter_p':0.8,
     'target_p':0.8,
-    'disc_weight':[1,1],
+    'disc_weight':[0.4,0.3,0.3],
     'class_bias':0,
     'sample':True,
     'temperature':1.2,
@@ -461,28 +461,29 @@ params = {
     'model_path':'gpt2-medium',
     'dataset_hate':'CONAN',
     'task_name':[('Emotion', 'sadness')],
+    'task_name':[("Emotion", "joy"),("Politeness", 'polite'),('Toxicity','toxic')],
     'coefficient':[4.5],
     'save_path': HULK_path+'Counterspeech/Results_new/',
     'device': 'cuda',
     'batch_size':4,
     'cache_path':HULK_path+'Saved_models/',
     'generation_method':'huggingface',
-    'gpu_id':1
+    'gpu_id':0
 }
                        
     
 if __name__ == "__main__":
     
     saved_path=HULK_path+'Counterspeech/Saved_Models/Generator/'
-    model_paths=[saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium',saved_path+'CONAN_DialoGPT-medium']
+    model_paths=[saved_path+'CONAN_DialoGPT-medium',saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium']
 #     saved_path+'Create_debate_DialoGPT-medium'    
 #     model_paths=[saved_path+'CONAN_DialoGPT-medium']
 #     model_paths=['microsoft/DialoGPT-medium']
-    datasets = ["Reddit","Gab","CONAN"]
+    datasets = ["CONAN","Reddit","Gab"]
 #     total = [model_paths, datasets]
 #     for element in itertools.product(*total):
     num_samples=5
-    for element in zip(model_paths,datasets):
+    for element in zip(model_paths[2:3],datasets[2:3]):
         model=element[0]
         dataset=element[1]
         print(model,dataset)
