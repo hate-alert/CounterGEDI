@@ -10,11 +10,11 @@ from keras.preprocessing.sequence import pad_sequences
 from tqdm import trange
 from tqdm import tqdm
 import numpy as np
-import neptune.new as neptune
 import GPUtil
 from Utils import misc,preprocess
 from sklearn.model_selection import train_test_split
 from apiconfig import project_name,api_token
+import neptune.new as neptune
 from transformers import (
     MODEL_WITH_LM_HEAD_MAPPING,
     WEIGHTS_NAME,
@@ -35,19 +35,23 @@ from Generation.utils import *
 
 from Utils.misc import *
 
+model_memory=9
+total_memory=16
 
-def get_gpu():
+def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
         tempID = [] 
-        tempID = GPUtil.getAvailable(order = 'memory', limit = 1, maxLoad = 0.1, maxMemory = 0.2, includeNan=False, excludeID=[], excludeUUID=[])
-        if len(tempID) > 0:
-            print("Found a gpu")
-            print('We will use the GPU:',tempID[0],torch.cuda.get_device_name(tempID[0]))
-            deviceID=tempID
-            return deviceID
-        else:
-            time.sleep(5)
+        tempID = GPUtil.getAvailable(order = 'memory', limit = 2, maxLoad = 1.0, maxMemory = (1-(model_memory/total_memory)), includeNan=False, excludeID=[], excludeUUID=[])
+        for i in range(len(tempID)):
+            if len(tempID) > 0 and (tempID[i]==gpu_id):
+                print("Found a gpu")
+                print('We will use the GPU:',tempID[i],torch.cuda.get_device_name(tempID[i]))
+                deviceID=[tempID[i]]
+                return deviceID
+            else:
+                time.sleep(5)
+                
 
 def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, device,run):
     """ Train the model """
@@ -184,9 +188,9 @@ def train_caller(params,run=None):
     tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
     train_data,valid_data,test_data=load_data_own_gen(data_path=dataset_path)
-    train_data_source = Normal_Generation_Dataset(train_data,tokenizer, params,train = True)
-    val_data_source = Normal_Generation_Dataset(valid_data,tokenizer,params)
-    test_data_source = Normal_Generation_Dataset(test_data,tokenizer, params)
+    train_data_source = Normal_Generation_Dataset(train_data,tokenizer, params,train = True, topic=params['topic'])
+    val_data_source = Normal_Generation_Dataset(valid_data,tokenizer,params, topic=params['topic'])
+    test_data_source = Normal_Generation_Dataset(test_data,tokenizer, params, topic=params['topic'])
     
     
     
@@ -195,11 +199,11 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-#             deviceID = get_gpu()
-#             torch.cuda.set_device(deviceID[0])
+            deviceID = get_gpu(0)
+            torch.cuda.set_device(deviceID[0])
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
-            torch.cuda.set_device(1)
+            #torch.cuda.set_device(0)
 
     else:
         print('Since you dont want to use GPU, using the CPU instead.')
@@ -230,12 +234,13 @@ def train_caller(params,run=None):
 
 params={
      'save_path':'../HULK_new/Counterspeech/Saved_models/Generator/',
-     'model_path':'microsoft/DialoGPT-medium',
+     'model_path':'microsoft/DialoGPT-small',
      'cache_path':'../HULK_new/Saved_models/',
-     'task_name':'CONAN',
-     'max_length': 256,
+     'task_name':'Create_debate_summarised',
+     'topic': True,
+     'max_length': 512,
      'train': True,
-     'batch_size':8,
+     'batch_size':4,
      'gradient_accumulation_steps':1,
      'learning_rate':5e-6,
      'weight_decay':0.0,
@@ -247,7 +252,7 @@ params={
      'seed':42,
      'device':'cuda',
      'logging':'local',
-     'freeze_layer_count':6
+     'freeze_layer_count':0
 }
 
 

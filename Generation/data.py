@@ -40,16 +40,18 @@ text_processor = TextPreProcessor(
 
 
 class Normal_Generation_Dataset():
-    def __init__(self, data, tokenizer=None,  params=None,train = False):
+    def __init__(self, data, tokenizer=None,  params=None,train = False, topic=False):
         self.data = data
         self.params= params
         self.batch_size = self.params['batch_size']
         self.train = train
+        self.topic = topic
         self.max_length=params['max_length']        
         self.count_dic = {}
         self.tokenizer = tokenizer
         self.inputs = self.process_data(self.data)
         self.DataLoader = self.get_dataloader(self.inputs)
+        
     
     def preprocess_func(self, text):
         remove_words=['<allcaps>','</allcaps>','<hashtag>','</hashtag>','<elongated>','<emphasis>','<repeated>','\'','s']
@@ -65,7 +67,11 @@ class Normal_Generation_Dataset():
     def construct_conv(self,dict_reply_pair):
         conv = None
         flatten = lambda l: [item for sublist in l for item in sublist]
-        initiator=self.preprocess_func(dict_reply_pair['initiator_message'])
+        initiator = None
+        if self.topic == True:
+            initiator= self.preprocess_func(dict_reply_pair['topic']) + self.tokenizer.eos_token + self.preprocess_func(dict_reply_pair['initiator_message']) 
+        else:
+            initiator=self.preprocess_func(dict_reply_pair['initiator_message'])
         reply=self.preprocess_func(dict_reply_pair['reply_message'])
 
 
@@ -75,6 +81,8 @@ class Normal_Generation_Dataset():
                     [self.tokenizer.eos_token_id]])
 
         conv = flatten(conv)
+        if (len(conv)>512):
+            print("Motto Motto")
         return conv
 
     def tokenize(self, dataframe):
