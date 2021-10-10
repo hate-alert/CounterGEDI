@@ -167,7 +167,7 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
         run["eval/best_perplexity_val"]=eval_best_val
         run["eval/best_perplexity_test"]=eval_best_test
     else:
-        print("best perplexity val", eval_best)
+        print("best perplexity val", eval_best_val)
         print("best perplexity test", eval_best_test)
     
     return global_step, tr_loss / global_step, eval_val
@@ -183,7 +183,7 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
 
 def train_caller(params,run=None):
     
-    dataset_path='../HULK_new/Counterspeech/Datasets/'+params['task_name']+'/'
+    dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
     config = AutoConfig.from_pretrained(params['model_path'],cache_dir=params['cache_path'])
     tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
@@ -199,7 +199,7 @@ def train_caller(params,run=None):
             device = torch.device("cuda")
             ##### You can set the device manually if you have only one gpu
             ##### comment this line if you don't want to manually set the gpu
-            deviceID = get_gpu(0)
+            deviceID = get_gpu(1)
             torch.cuda.set_device(deviceID[0])
             ##### comment this line if you want to manually set the gpu
             #### required parameter is the gpu id
@@ -233,9 +233,9 @@ def train_caller(params,run=None):
 
 
 params={
-     'save_path':'../HULK_new/Counterspeech/Saved_models/Generator/',
+     'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
      'model_path':'microsoft/DialoGPT-small',
-     'cache_path':'../HULK_new/Saved_models/',
+     'cache_path':'../HULK/Saved_models/',
      'task_name':'Create_debate_summarised',
      'topic': True,
      'max_length': 512,
