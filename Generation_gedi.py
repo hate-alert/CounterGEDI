@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 import GPUtil
 import time
-import itertools
 from Generation.eval import *
 from Generation.utils import *
 from Generation.models import *
@@ -30,7 +29,7 @@ debug=False
 # )
 
 from transformers import AutoTokenizer,AutoModelForCausalLM
-HULK_path='../HULK/'
+HULK_path='../HULK/' 
 
 print(HULK_path)
 
@@ -50,9 +49,6 @@ def get_gpu(gpu_id):
             else:
                 time.sleep(5)
 
-
-
-# In[23]:
 def get_dataloader(sentences, tokenizer, params):
     sents=[]
     attns=[]
@@ -152,7 +148,10 @@ def generate(params,hate_sentences,model,controller_list,tokenizer,device,use_co
     return cntr
 
 
-def generate_huggingface_method(params,hate_sentences,model,controller_list,tokenizer,device,control_type='dexpert',num_samples=10):
+def generate_huggingface_method(params,hate_sentences,model,controller_list,tokenizer,device,control_type='gedi',num_samples=10):
+    """
+    Generates senetenecs using Huggingface Generation Method
+    """
     cntr = []
     model.eval()
     
@@ -170,16 +169,15 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
             input_ids = torch.cat((input_ids,eos),1)
             input_ids=input_ids.to(device)
             
-            
-            bad_words_list = ["Plastic"]
-            bad_words_ids = [tokenizer.encode(x, add_special_tokens=False) for x in bad_words_list]
-            print(bad_words_ids)
+            # input_ids = [Hatespeech]<|endoftext|>
+
             ####### greedy_Decoding ######
             beam_outputs = model.generate(
                 controller_alphas=alpha_controller,
                 controller_list=controller_list,
                 control_type=control_type,
-                positive_class=['false','false','true'], 
+                positive_class=['false','false','true'],     # Positive class for each Counter-Gedi Model provided in params['task_name'] list
+                                                             # towards which the model will move the Generated Logits to (and away from negative class)
                 negative_class=['true','true','false'], 
                 unpertubed_count=params['unpertubed_count'],
                 tokenizer=tokenizer,
@@ -196,11 +194,12 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
                 repetition_penalty   = params["repitition_penalty"],
                 temperature          = params["temperature"],
                 num_beams            = params['num_beams'], 
-                bad_words_ids        = bad_words_ids,
                 do_sample            = params['sample'],
                 no_repeat_ngram_size = params['no_repeat_ngram_size'],  
                 early_stopping       = params['early_stopping']
             )
+
+            # beam_output = [Hatespeech]<|endoftext|>[Generated Counterspeech]
             reply = (tokenizer.decode(beam_outputs[0])).split(params['sep_token'])[1]
             cntr_temp.append(reply)
         print("hate",hate_sentences[step])
@@ -209,80 +208,11 @@ def generate_huggingface_method(params,hate_sentences,model,controller_list,toke
         if step>0 and step%100==0:
             print("doing")
     return cntr
-
-
-def generate_single_own(params,hate_sentences,model,controller_list,tokenizer,device,use_control=True):
     
-    cntr=[]
-    for step in tqdm(range(len(hate_sentences))):
-        cntr_temp=[]
-        for i in range(10):
-            # encode the new user input, add the eos_token and return a tensor in Pytorch
-            input_ids = tokenizer.encode(hate_sentences[step],truncation=True,max_length=params['max_input_length'],return_tensors='pt') 
-            eos = tokenizer.encode(params['sep_token'],return_tensors='pt')
-            input_ids = torch.cat((input_ids,eos),1)
-            input_ids=input_ids.to(device)
-            with torch.no_grad():
-                for step in range(params['max_generation_length']):
-                    outputs = model(input_ids)
-                    ensemble_logits=outputs.logits
-
-                    if params['filter_p'] < 1.0:
-                        ensemble_logits = top_k_top_p_filtering(ensemble_logits, top_p=params['filter_p'])
-                    if(debug==True):
-                        print("before controller")
-                        print(ensemble_logits[:,-1,:])
-                        print(torch.max(ensemble_logits[:,-1,:], dim=-1))
-
-                    if(len(controller_list)>0 and use_control):
-                        controller_logits=[]
-                        for model_temp in controller_list:
-                            temp_outputs = model(input_ids)
-                            logits_temp=temp_outputs.logits
-                            #print(logits_temp)
-                            controller_logits.append(logits_temp)
-                        for i in range(len(controller_list)):
-                            alpha = torch.tensor(params['coefficient'][i]).to(device)
-                            ensemble_logits += alpha * (controller_logits[i])
-                    if(debug==True):
-                        print("after controller")
-                        print(ensemble_logits[:,-1,:])
-                        print(torch.max(ensemble_logits[:,-1,:], dim=-1))
-
-                    next_token_logits = ensemble_logits[:, -1, :]
-
-                    if params['sample']==True:
-                        # Temperature (higher temperature => more likely to sample low probability tokens)
-                        if params['temperature'] != 1.0:
-                            next_token_logits = next_token_logits /  params['temperature']
-
-                        # Top-p/top-k filtering
-                        next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=params['k'], top_p=params['p'])
-                        # Sample
-                        probs = F.softmax(next_token_logits, dim=-1)
-                        next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-                    else:
-                        # Greedy decoding
-                        next_tokens = torch.argmax(next_token_logits, dim=-1)
-
-
-                    # this updates which sentences have not seen an EOS token so far
-                    # if one EOS token was seen the sentence is finished
-
-                    if next_tokens == tokenizer.eos_token_id:
-                        break
-                    # Update input_ids, attention_mask and position_ids
-                    input_ids = torch.cat([input_ids, next_tokens.unsqueeze(-1)], dim=-1)
-
-                reply = (tokenizer.decode(input_ids[0])).split(params['sep_token'])[1]  
-                print(reply)
-                cntr_temp.append(reply)
-            cntr.append(cntr_temp)
-    return cntr
-
-    
-
 def hate_refrences(data,test_set):
+    """
+    Extract all counterspeech references for each hatespeech in the given dataset
+    """
     hate  = []
     reply = []
     refrences = []
@@ -305,13 +235,10 @@ def hate_refrences(data,test_set):
     refs = [mp[ht_i] for ht_i in hate]
     return hate,refs             # a given hate instance and refrences(replies) for metrics evaluation
 
-
-
-
 def main(params,model_path,dataset,gpu_id,num_samples):
-    print(HULK_path)
-    path_models   = HULK_path+'Counterspeech/Saved_Models/Generator'
-    path_models_disc   = HULK_path+'Counterspeech/Saved_Models/Discriminator'
+    # print(HULK_path)  
+    path_models   = HULK_path+'Counterspeech/Saved_Models/Generator'                # Path to Generator Models 
+    path_models_disc   = HULK_path+'Counterspeech/Saved_Models/Discriminator'       # Path to Disciminator Gedi Models
     path_datasets = HULK_path+'/Counterspeech/Datasets'
 
     
@@ -330,8 +257,6 @@ def main(params,model_path,dataset,gpu_id,num_samples):
         print('Since you dont want to use GPU, using the CPU instead.')
         device = torch.device("cpu")
     
-    
-    
     test_path  = path_datasets+'/'+dataset+'/Test.csv'
     train_path  = path_datasets+'/'+dataset+'/Train.csv'
 
@@ -339,14 +264,7 @@ def main(params,model_path,dataset,gpu_id,num_samples):
     
     #Politeness_dexpert_gpt2_polite
     controller_list=[]
-    if(params['control_type']=='dexpert'):
-        for task in params['task_name']:
-            path_model_task=path_models+'/'+task[0]+'_dexpert_gpt2_'+task[1]+'/'
-            model_temp=AutoModelForCausalLM.from_pretrained(path_model_task,cache_dir=cache_path)
-            model_temp.to(device)
-            model_temp.eval()
-            controller_list.append(model_temp)
-    elif(params['control_type']=='gedi'):
+    if(params['control_type']=='gedi'):     # Load controller Gedi models for Generation as per the list provided 
         #if(len(params['task_name'])>1):
         #    print("gedi model controls attribute one at a time")
         #else:
@@ -360,18 +278,16 @@ def main(params,model_path,dataset,gpu_id,num_samples):
             controller_list.append(model_temp)
 
     print("Length of Controller List: ", len(controller_list))
+    
+    # Load saved model and Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_path,cache_dir=cache_path)
     model = Model_Generation.from_pretrained(model_path,cache_dir=cache_path)
-    if(params['generation_method']=='own'):
-        tokenizer.padding_side = "left" 
-        tokenizer.pad_token = tokenizer.eos_token # to avoid an error
-    
+
     model.to(device)
     model.eval()
     
-    
     train = pd.read_csv(train_path)
-    test  = pd.read_csv(test_path)
+    test  = pd.read_csv(test_path)[:100]        # Generate counterspeech for 100 test samples, can be modified to entire files
     train_set = list(zip(train['initiator_message'].tolist(),train['reply_message'].tolist()))
     test_set  = list(zip(test['initiator_message'].tolist(),test['reply_message'].tolist()))
     data = []
@@ -380,13 +296,10 @@ def main(params,model_path,dataset,gpu_id,num_samples):
     for x in train_set:
         data.append(x)
     print(len(data),len(test_set),len(train_set))
-    hate, cntr_refs = hate_refrences(data,test_set) 
-    
+    hate, cntr_refs = hate_refrences(data,test_set)     # Load all Hate Sentences and a list of Counterspeech References corresponding to that Sentence     
     
     if(params['generation_method']=='huggingface'):
         cntr_replies = generate_huggingface_method(params,hate,model,controller_list,tokenizer,device,control_type=params['control_type'],num_samples=num_samples)
-    elif(params['generation_method']=='own'):
-        cntr_replies = generate_single_own(params,hate,model,controller_list,tokenizer,device,use_control=True)
     
     if(params['control_type']!='none'):
         for controller in controller_list:
@@ -423,46 +336,40 @@ def main(params,model_path,dataset,gpu_id,num_samples):
     ts = str(int(ts))
     
     
-    if(params['generation_method']=='huggingface'):
-        if(params['control_type']=='dexpert'):
-            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_huggingface_"+ts+".json"
-        elif(params['control_type']=='gedi'):
-            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_gedi_huggingface_"+ts+"_multi.json"
-        else:
-            write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_huggingface_"+ts+"_base.json"
-    elif(params['generation_method']=='own'):
-        write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_dexpert_"+ts+".json"
-
+    if(params['control_type']=='gedi'):
+        write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_gedi_huggingface_"+ts+"_multi.json"
+    else:
+        write_in=params["save_path"] + model_path_modified +"_on_"+dataset+"_huggingface_"+ts+"_base.json"
+    
+    # Dump results into the "write_in" file
     with open(write_in, 'w') as outfile:
          json.dump(dict_results, outfile,indent=4)
 
-# ('Toxicity', 'toxic')
-# ("Politeness", 'polite')    
-# ("Emotion", "joy")
 params = {
     'sep_token':'<|endoftext|>',
-    'max_generation_length': 100,
-    'min_generation_length':40,
-    'max_input_length':128,
+    'max_generation_length': 100,   # Maximum length of Generated Sentence
+    'min_generation_length':40,     # Minimum length of Generated Sentence
+    'max_input_length':128,         # Maximum length of Input Sentence, after which input is truncated 
     'num_beams':1,
-    'unpertubed_count':10,
+    'unpertubed_count':10,          # Number of tokens to be generated without any perturbation by CounterGedi Model (Only base Model used)
     'no_repeat_ngram_size':5,
     'repitition_penalty': 3.5,
-    'control_type':'gedi',
+    'control_type':'gedi',          # Takes Values: 'gedi'-> for counterGedi or 'none' (for base model sampling)
     'k':100,
     'p':0.92,
     'filter_p':0.8,
     'target_p':0.8,
-    'disc_weight':[0.4,0.3,0.3],
+    'disc_weight':[0.4,0.3,0.3],    # Weights of different conditionals (controlling parameters) we want to focus on, during generation
     'class_bias':0,
     'sample':True,
     'temperature':1.2,
     'early_stopping':True,
     'model_path':'gpt2-medium',
     'dataset_hate':'CONAN',
-    'task_name':[('Emotion', 'sadness'),('Politeness', 'polite'),('Toxicity', 'toxic')],
+    'task_name':[('Emotion', 'joy'),('Politeness', 'polite'),('Toxicity', 'toxic')],    # Controlling parameters, which we want to control while generation
+                                                                                        # Used to load the respective Gedi Models for steering of results
     'coefficient':[4.5],
-    'save_path': HULK_path+'Counterspeech/Results_new/',
+    'save_path': HULK_path+'Counterspeech/Results_new/',        # Path where results are to be stored in json file
     'device': 'cuda',
     'batch_size':4,
     'cache_path':HULK_path+'Saved_models/',
@@ -473,15 +380,11 @@ params = {
     
 if __name__ == "__main__":
     
-    saved_path=HULK_path+'Counterspeech/Saved_Models/Generator/'
-    model_paths=[saved_path+'CONAN_DialoGPT-medium',saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium']
-#     saved_path+'Create_debate_DialoGPT-medium'    
-#     model_paths=[saved_path+'CONAN_DialoGPT-medium']
-#     model_paths=['microsoft/DialoGPT-medium']
-    datasets = ["CONAN","Reddit","Gab"]
-#     total = [model_paths, datasets]
-#     for element in itertools.product(*total):
-    num_samples=5
+    saved_path=HULK_path+'Counterspeech/Saved_Models/Generator/'        # Path to the folder where the Counter Gedi model is saved
+    # model_paths consist of list of trained model folders which contain the respective .pt files of saved models
+    model_paths=[saved_path+'CONAN_DialoGPT-medium',saved_path+'Reddit_DialoGPT-medium', saved_path+'Gab_DialoGPT-medium']  
+    datasets = ["CONAN","Reddit","Gab"]     # List of Hatespeech-Counterspeech datasets for which we want to Generate counterspeech samples 
+    num_samples=5   # Number of samples to be generated per Hatespeech
     for element in zip(model_paths[2:3],datasets[2:3]):
         model=element[0]
         dataset=element[1]
