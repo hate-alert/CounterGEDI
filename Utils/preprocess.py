@@ -18,9 +18,6 @@ from transformers import (
 
 import re
 
-
-
-
 ##### text preprocessor for ekphrasis
 text_processor = TextPreProcessor(
     # terms that will be normalized
@@ -51,8 +48,6 @@ text_processor = TextPreProcessor(
     dicts=[emoticons])
 
 
-
-
 def preprocess_function(text):
     remove_words=['<allcaps>','</allcaps>','<hashtag>','</hashtag>','<elongated>','<emphasis>','<repeated>','\'','s']
     word_list=text_processor.pre_process_doc(text)
@@ -60,8 +55,6 @@ def preprocess_function(text):
     sent=" ".join(word_list)
     sent = re.sub(r"[<\*>]", " ",sent)
     return sent
-
-
 
 
 def construct_conv(dict_reply_pair, tokenizer, eos = True, block_size=512, dataset="Debate"):

@@ -37,15 +37,12 @@ text_processor = TextPreProcessor(
     dicts=[emoticons])
 
 
-
-
 class Normal_Generation_Dataset():
     def __init__(self, data, tokenizer=None,  params=None,train = False, topic=False):
         self.data = data
         self.params= params
         self.batch_size = self.params['batch_size']
         self.train = train
-        self.topic = topic
         self.max_length=params['max_length']        
         self.count_dic = {}
         self.tokenizer = tokenizer
@@ -67,13 +64,8 @@ class Normal_Generation_Dataset():
     def construct_conv(self,dict_reply_pair):
         conv = None
         flatten = lambda l: [item for sublist in l for item in sublist]
-        initiator = None
-        if self.topic == True:
-            initiator= self.preprocess_func(dict_reply_pair['topic']) + self.tokenizer.eos_token + self.preprocess_func(dict_reply_pair['initiator_message']) 
-        else:
-            initiator=self.preprocess_func(dict_reply_pair['initiator_message'])
+        initiator=self.preprocess_func(dict_reply_pair['initiator_message'])
         reply=self.preprocess_func(dict_reply_pair['reply_message'])
-
 
         conv = list([self.tokenizer.encode(initiator,truncation=True,max_length=int((self.max_length/2)-1))+ 
                      [self.tokenizer.eos_token_id] + 
@@ -106,68 +98,3 @@ class Normal_Generation_Dataset():
         else:
             sampler = SequentialSampler(data)
         return DataLoader(data, sampler=sampler, batch_size=self.batch_size, drop_last=True)
-
-
-    
-    
-    
-    
-    
-    
-    
-class Normal_Dexpert_Dataset(Normal_Generation_Dataset):
-    def __init__(self, data, tokenizer=None,  params=None,train = False):
-        self.params= params
-        self.label = params['label']
-        data=data[data['labels']==self.label]
-        self.data = data
-        self.batch_size = self.params['batch_size']
-        self.train = train
-        self.max_length=params['max_length']        
-        self.count_dic = {}
-        self.tokenizer = tokenizer
-        self.inputs = self.process_data(self.data)
-        self.DataLoader = self.get_dataloader(self.inputs)
-    
-    
-    
-    def construct_conv(self,dict_reply_pair):
-        conv = None
-        initiator=self.preprocess_func(dict_reply_pair['text'])
-        conv = list(self.tokenizer.encode(initiator,truncation=True,max_length=int(self.max_length)))
-        return conv
-
-    
-class Normal_Dexpert_Dataset_new(Normal_Generation_Dataset):
-    def __init__(self, data, tokenizer=None,  params=None,train = False):
-        self.params= params
-        self.label = params['label']
-        if(params['take_label']=='true'):
-            data=data[data['labels']==self.label]
-        else:
-            data=data[data['labels']!=self.label]
-        self.data = data
-        self.batch_size = self.params['batch_size']
-        self.train = train
-        self.max_length=params['max_length']        
-        self.count_dic = {}
-        self.tokenizer = tokenizer
-        self.inputs = self.process_data(self.data)
-        self.DataLoader = self.get_dataloader(self.inputs)
-    
-    def tokenize(self, dataframe):
-        inputs=[]
-        past_left=[]
-        for index,row in tqdm(dataframe.iterrows(),total=len(dataframe)):
-            conv, past_left = self.construct_conv(row,past_left)
-            inputs.append(conv)
-        return inputs
-    
-    def construct_conv(self,dict_reply_pair,past_left):
-        initiator=self.preprocess_func(dict_reply_pair['text'])
-        conv = list(self.tokenizer.tokenize(initiator))
-        conv = past_left+conv
-        conv_new=self.tokenizer.convert_tokens_to_ids(conv[:self.max_length])
-        past_left=conv[self.max_length:]
-                    
-        return conv_new,past_left

@@ -38,6 +38,7 @@ from Utils.misc import *
 model_memory=9
 total_memory=16
 
+# Check for availability of GPU and accordingly return the GPU id available to use
 def get_gpu(gpu_id):
     print('There are %d GPU(s) available.' % torch.cuda.device_count())
     while(1):
@@ -172,27 +173,17 @@ def train(params,train_dataloader, eval_dataloader, test_dataloader, model: PreT
     
     return global_step, tr_loss / global_step, eval_val
 
-
-
-
-
-
-
-
-
-
 def train_caller(params,run=None):
     
-    dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'
+    dataset_path='../HULK/Counterspeech/Datasets/'+params['task_name']+'/'       # Path to the datatset defined as "All_Dataset_folder/" + params["task_name"] + "/"
     config = AutoConfig.from_pretrained(params['model_path'],cache_dir=params['cache_path'])
     tokenizer = AutoTokenizer.from_pretrained(params['model_path'],cache_dir=params['cache_path'],fast=False)
     tokenizer.pad_token = tokenizer.eos_token
-    train_data,valid_data,test_data=load_data_own_gen(data_path=dataset_path)
-    train_data_source = Normal_Generation_Dataset(train_data,tokenizer, params,train = True, topic=params['topic'])
+    train_data,valid_data,test_data=load_data_own_gen(data_path=dataset_path)	 # Load the train, validation and test data from Dataset_paths
+										 # Assume data_path contains three files Train.csv, Val.csv and Test.csv 
+    train_data_source = Normal_Generation_Dataset(train_data,tokenizer, params,train = True, topic=params['topic'])		# Preprocess the dataset 
     val_data_source = Normal_Generation_Dataset(valid_data,tokenizer,params, topic=params['topic'])
     test_data_source = Normal_Generation_Dataset(test_data,tokenizer, params, topic=params['topic'])
-    
-    
     
     if torch.cuda.is_available() and params['device']=='cuda':    
         # Tell PyTorch to use the GPU.    
