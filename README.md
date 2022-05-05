@@ -2,7 +2,7 @@
 
 #### For more details about our paper
 
-Punyajoy Saha , Kanishk Singh , Adarsh Kumar , Binny Mathew and Animesh Mukherjee : "[CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech"](ADD_LINK_HERE)
+Punyajoy Saha, Kanishk Singh, Adarsh Kumar, Binny Mathew and Animesh Mukherjee : "[CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech"](ADD_LINK_HERE)
 
 [Arxiv Paper Link](ADD_LINK_HERE)
 
