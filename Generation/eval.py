@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,recall_score,precision_score
 import torch
 from tqdm import tqdm
-
+from nltk import word_tokenize
 import nltk
 from nltk.translate import meteor
 from nltk.translate.bleu_score import SmoothingFunction
@@ -71,22 +71,23 @@ def nltk_metrics(params):
     hypo = params[0]  # a list of generated_hypothesis   
     refs = params[1]  # a list of refrences for particular_refrences    
     
-    bleu = bleu_4 = meteor_ = 0.0
+    bleu = bleu_2 = meteor_ = 0.0
     
     for step in range(len(hypo)):
         ref = refs[step]
+        ref_list = []
+        for i in range(len(ref)):
+            ref_list.append(word_tokenize(ref[i]))
+        #print(ref_list)   
         hyp = hypo[step]
-        bleu    += nltk.translate.bleu_score.sentence_bleu(ref,hyp)
-        try:
-            bleu_4  += nltk.translate.bleu_score.sentence_bleu(ref,hyp,smoothing_function=SmoothingFunction().method4)
-        except:
-            pass
+        bleu    += nltk.translate.bleu_score.sentence_bleu(ref_list,word_tokenize(hyp))
+        bleu_2  += nltk.translate.bleu_score.sentence_bleu(ref_list,word_tokenize(hyp),smoothing_function=SmoothingFunction().method2, weights=(0.5, 0.5, 0, 0))
         meteor_ += meteor(ref, hyp)
     bleu    /= len(hypo)
-    bleu_4  /= len(hypo)
+    bleu_2  /= len(hypo)
     meteor_ /= len(hypo)
     
-    return bleu,bleu_4,meteor_
+    return bleu,bleu_2,meteor_
 
 
 
@@ -135,5 +136,5 @@ def get_diversity(sentences):
     
 def diversity_and_novelty(training_corpus,gen_replies):
     diversity = get_diversity(gen_replies)
-    novelty   = avg_novelty(gen_replies,training_corpus)
+    novelty   = 0#avg_novelty(gen_replies,training_corpus)
     return diversity,novelty
