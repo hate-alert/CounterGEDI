@@ -1,4 +1,4 @@
-# :mag_right: CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech [Accepted at IJCAI 2022: AI for Good(Special Track)]
+# :joystick: CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech [Accepted at IJCAI 2022: AI for Good(Special Track)]
 
 #### For more details about our paper
 
