@@ -36,3 +36,14 @@ Please cite our paper in any published work that uses any of these resources.
 For Emotions Evaluation:
 - Do `git clone https://github.com/monologg/GoEmotions-pytorch`
 - Then move the `Evaluation notebook-Emotion` to the `GoEmotions-pytorch` folder and set file paths accordingly for running evaluation
+
+For Toxicity Evaluation:
+- 
+
+### Todos
+- [ ] Add arxiv paper link.
+- [ ] Usage Instruction General
+- [ ] Add Evaluation Instruction
+- [ ] Add generated result files
+
+#####  :thumbsup: The repo is still in active developements. Feel free to create an [issue](https://github.com/punyajoy/HateXplain/issues) !!  :thumbsup:
