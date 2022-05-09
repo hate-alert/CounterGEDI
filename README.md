@@ -41,6 +41,11 @@ For Toxicity Evaluation:
 - Toxicity is calculated using HateXplain model
 - The colab notebook could be accessed here - [CounterGedi_detox_eval.ipynb](https://colab.research.google.com/drive/14G1VnOZm0YHP5bBlgetM2mR-MFh8MUxq?usp=sharing)
 
+For Grammatical Coherence Evaluation:
+- To evaluate whether the respsonses were grammaticaly coreect or not, we use a pretrained model trained on the corpus of linguistic acceptability(COLA scores).
+- The colab notebook could be accessed here - [CounterGedi_COLA_eval.ipynb](https://colab.research.google.com/drive/1nm-cGZlwuBX7r65XtTmkpIUZObPo9gfC?usp=sharing)
+
+
 ### Todos
 - [ ] Add arxiv paper link.
 - [ ] Usage Instruction General
