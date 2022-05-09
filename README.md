@@ -33,6 +33,28 @@ Please cite our paper in any published work that uses any of these resources.
 ***Usage instructions*** 
 ------------------------------------------
 
+#### BaseModel Training for Counterspeech
+
+To train the base model for Counterspeech Generation, run the file `Generation_training.py`, after updating the task name and other saving related parameters as per the requirement(see comments to get more idea on different path variables to be updated).
+
+#### Generation
+
+For generation of results, run `Generation_gedi.py` file. 
+In order to generate the required result file, adjust the parameters in `params` dictionary in the python file, as per the requirement. For example
+```python
+# To generate sentences controlled for emotion joy + Politeness:
+params = {
+     ...
+     ...
+     'disc_weight':[0.5, 0.5],
+     ...
+     ...
+     'task_name':[('Emotion', 'joy'), ('Politeness', 'polite')],
+     ...
+}
+```
+
+Similarly you can tweak other papameters to change the results as per the requirement. 
 
 
 
@@ -42,7 +64,7 @@ Please cite our paper in any published work that uses any of these resources.
 
 For Generation Metrics:
 - We evaluate the generated responses on variety of metrics including BLEU,meteor, diversity and novelty.
-- The methods to compute these scores are described in the Evaluation notebook.ipynb
+- The methods to compute these scores are described in the `Evaluation notebook.ipynb`
 
 For Emotions Evaluation:
 - Do `git clone https://github.com/monologg/GoEmotions-pytorch`
@@ -59,8 +81,9 @@ For Grammatical Coherence Evaluation:
 
 ### Todos
 - [ ] Add arxiv paper link.
-- [ ] Usage Instruction General
-- [ ] Add Evaluation Instruction
+- [x] Usage Instruction General
+- [ ] Usage Instruction: Gedi Training part
+- [x] Add Evaluation Instruction
 - [ ] Add generated result files
 
 #####  :thumbsup: The repo is still in active developements. Feel free to create an [issue](https://github.com/punyajoy/HateXplain/issues) !!  :thumbsup:
