@@ -38,7 +38,8 @@ For Emotions Evaluation:
 - Then move the `Evaluation notebook-Emotion` to the `GoEmotions-pytorch` folder and set file paths accordingly for running evaluation
 
 For Toxicity Evaluation:
-- 
+- Toxicity is calculated using HateXplain model
+- The colab notebook could be accessed here - [CounterGedi_detox_eval.ipynb](https://colab.research.google.com/drive/14G1VnOZm0YHP5bBlgetM2mR-MFh8MUxq?usp=sharing)
 
 ### Todos
 - [ ] Add arxiv paper link.
