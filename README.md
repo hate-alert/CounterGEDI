@@ -42,7 +42,7 @@ Please cite our paper in any published work that uses any of these resources.
 
 For Generation Metrics:
 - We evaluate the generated responses on variety of metrics including BLEU,meteor, diversity and novelty.
-- The metrics-methods are described in the Evaluation notebook.ipynb
+- The methods to compute these scores are described in the Evaluation notebook.ipynb
 
 For Emotions Evaluation:
 - Do `git clone https://github.com/monologg/GoEmotions-pytorch`
