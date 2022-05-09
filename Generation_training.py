@@ -227,7 +227,7 @@ params={
      'save_path':'../HULK/Counterspeech/Saved_models/Generator/',
      'model_path':'microsoft/DialoGPT-small',
      'cache_path':'../HULK/Saved_models/',
-     'task_name':'Create_debate_summarised',
+     'task_name':'CONAN',	# Task name -> name of the task for which model needs to be trained, takes values like: CONAN, Reddit, Gab
      'topic': True,
      'max_length': 512,
      'train': True,
