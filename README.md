@@ -2,9 +2,9 @@
 
 #### For more details about our paper
 
-Punyajoy Saha, Kanishk Singh, Adarsh Kumar, Binny Mathew and Animesh Mukherjee : "[CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech"](ADD_LINK_HERE)
+Punyajoy Saha, Kanishk Singh, Adarsh Kumar, Binny Mathew and Animesh Mukherjee : "[CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech"](https://arxiv.org/abs/2205.04304.pdf)
 
-[Arxiv Paper Link](ADD_LINK_HERE)
+[Arxiv Paper Link](https://arxiv.org/pdf/2205.04304.pdf)
 
 # Abstract
 Recently, many studies have tried to create generation models to assist counter speakers by providing counterspeech suggestions for combating the explosive proliferation of online hate. However, since these suggestions are from a vanilla generation model, they might not include the appropriate properties required to counter a particular hate speech instance. In this paper, we propose **CounterGeDi** - an ensemble of generative discriminators (GeDi) to guide the generation of a DialoGPT model toward more polite, detoxified, and emotionally laden counterspeech. We generate counterspeech using three datasets and observe significant improvement across different attribute scores. The politeness and detoxification scores increased by around 15% and 6% respectively, while the emotion in the counterspeech increased by at least 10% across all the datasets. We also experiment with triple-attribute control and observe significant improvement over single attribute results when combining complementing attributes, e.g., _politeness, joyfulness_ and _detoxification_. In all these experiments, the relevancy of the generated text does not deteriorate due to the application of these controls.
@@ -16,6 +16,16 @@ Recently, many studies have tried to create generation models to assist counter 
 Please cite our paper in any published work that uses any of these resources.
 
 ~~~bibtex
+@misc{https://doi.org/10.48550/arxiv.2205.04304,
+  doi = {10.48550/ARXIV.2205.04304}, 
+  url = {https://arxiv.org/abs/2205.04304},
+  author = {Saha, Punyajoy and Singh, Kanishk and Kumar, Adarsh and Mathew, Binny and Mukherjee, Animesh},
+  keywords = {Computation and Language (cs.CL), Computers and Society (cs.CY), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {CounterGeDi: A controllable approach to generate polite, detoxified and emotional counterspeech},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {Creative Commons Attribution 4.0 International}
+}
 
 ~~~
 
@@ -80,10 +90,12 @@ For Grammatical Coherence Evaluation:
 
 
 ### Todos
-- [ ] Add arxiv paper link.
+- [x] Add arxiv paper link.
+- [ ] Add link to Proceedings paper.
 - [x] Usage Instruction General
 - [ ] Usage Instruction: Gedi Training part
 - [x] Add Evaluation Instruction
 - [ ] Add generated result files
+- [ ] Remove Redundant Files (WIP)
 
 #####  :thumbsup: The repo is still in active developements. Feel free to create an [issue](https://github.com/punyajoy/HateXplain/issues) !!  :thumbsup:
