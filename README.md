@@ -66,8 +66,6 @@ params = {
 
 Similarly you can tweak other papameters to change the results as per the requirement. 
 
-
-
 -------------------------------------------
 ***Evaluation instructions***
 -------------------------------------------
@@ -97,4 +95,4 @@ For Grammatical Coherence Evaluation:
 - [x] Remove Redundant Files
 - [ ] Add generated result files
 
-#####  :thumbsup: The repo is still in active developements. Feel free to create an [issue](https://github.com/punyajoy/HateXplain/issues) !!  :thumbsup:
+#####  :thumbsup: The repo is still in active developements. Feel free to create an [issue](https://github.com/hate-alert/CounterGEDI/issues) !!  :thumbsup:
