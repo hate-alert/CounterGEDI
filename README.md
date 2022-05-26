@@ -93,9 +93,8 @@ For Grammatical Coherence Evaluation:
 - [x] Add arxiv paper link.
 - [ ] Add link to Proceedings paper.
 - [x] Usage Instruction General
-- [ ] Usage Instruction: Gedi Training part
 - [x] Add Evaluation Instruction
+- [x] Remove Redundant Files
 - [ ] Add generated result files
-- [ ] Remove Redundant Files (WIP)
 
 #####  :thumbsup: The repo is still in active developements. Feel free to create an [issue](https://github.com/punyajoy/HateXplain/issues) !!  :thumbsup:
