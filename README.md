@@ -86,12 +86,6 @@ For Grammatical Coherence Evaluation:
 - To evaluate whether the respsonses were grammaticaly coreect or not, we use a pretrained model trained on the corpus of linguistic acceptability(COLA scores).
 - The colab notebook could be accessed here - [CounterGedi_COLA_eval.ipynb](https://colab.research.google.com/drive/1nm-cGZlwuBX7r65XtTmkpIUZObPo9gfC?usp=sharing)
 
--------------------------------------------
-***Generated Samples***
--------------------------------------------
-- The generated files with single and multiple attribute controls can be accessed her - [CounterGedi_gen_samples](https://drive.google.com/drive/folders/1qUzNBqYeTJsC5OBpEuSgMjIsx4gn_q65?usp=sharing)
-- The files ending with 'single.json' represents files with single attribute controls and the files ending with 'multiple.json' represents generated samples with multiple atribute controls.
-- The infused emotions can be retrieved from the `task_name` parameter.
 
 ### Todos
 - [x] Add arxiv paper link.
